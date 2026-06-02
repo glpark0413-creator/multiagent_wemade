@@ -1038,6 +1038,44 @@ def event_analyze_patterns():
                    analysis=analysis, log=log)
 
 
+@app.route("/api/event/date-patterns", methods=["POST"])
+def event_date_patterns():
+    """날짜별 이벤트 패턴 분석 — Google Sheets URL 또는 xlsx 경로 지원."""
+    data   = request.json
+    source = data.get("source_path", "").strip()
+    if not source:
+        return jsonify(ok=False, message="source_path 가 필요합니다.")
+
+    # Google Sheets / Drive URL → 로컬 xlsx 다운로드
+    try:
+        source_local, _ = resolve_source(source)
+    except Exception as e:
+        return jsonify(ok=False, message=f"파일 로드 실패: {e}")
+
+    if not Path(source_local).exists():
+        return jsonify(ok=False, message=f"파일 없음: {source_local}")
+
+    write_current_project(source_xlsx=source_local)
+
+    cmd = [sys.executable, str(SCRIPTS_DIR / "analyze_date_patterns.py"), source_local]
+    ok, log = run_script(cmd)
+
+    result = {}
+    out_file = EP_WORK / "date_pattern_analysis.json"
+    if out_file.exists():
+        try:
+            result = json.loads(out_file.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    return jsonify(
+        ok=ok,
+        message="날짜별 패턴 분석 완료" if ok else "분석 경고 (결과 확인 필요)",
+        analysis=result,
+        log=log,
+    )
+
+
 @app.route("/api/event/upload-gsheets", methods=["POST"])
 def event_upload_gsheets():
     data        = request.json

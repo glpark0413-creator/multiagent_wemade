@@ -828,7 +828,189 @@ async function epAnalyzePatterns() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 이벤트 기획 — ④ 출력
+// 이벤트 기획 — ④ 날짜별 패턴 분석
+// ═══════════════════════════════════════════════════════════════════════════
+async function epDatePatterns() {
+  const source = document.getElementById('dp-source').value.trim();
+  if (!source) { showToast('소스 경로 또는 Google Sheets URL을 입력하세요.', 'fail'); return; }
+
+  const btn = event.currentTarget;
+  setBtnLoading(btn, true);
+  const data = await api('POST', '/api/event/date-patterns', { source_path: source });
+  setBtnLoading(btn, false);
+
+  setLog('dp-log', data.log || '', data.ok);
+
+  const a = data.analysis || {};
+  if (!a.total_tabs) {
+    showToast('분석 결과가 없습니다.', 'fail'); return;
+  }
+
+  showToast(`✅ 날짜별 패턴 분석 완료 (탭 ${a.total_tabs}개)`, 'ok');
+
+  // ── 알림 배너 ──────────────────────────────────────────────────────────
+  const alertsEl = document.getElementById('dp-alerts');
+  alertsEl.classList.remove('hidden');
+
+  const missingBanner = document.getElementById('dp-missing-banner');
+  const newBanner = document.getElementById('dp-new-banner');
+
+  if ((a.missing_alerts || []).length) {
+    let html = `<div class="alert alert-warning" style="margin-bottom:10px">
+      <strong>⚠️ 누락 알림 ${a.missing_alerts.length}건</strong>
+      <ul style="margin:8px 0 0 18px;padding:0">`;
+    for (const al of a.missing_alerts) {
+      const sev = al.severity === 'high' ? '❗' : '⚠';
+      html += `<li><strong>${sev} ${al.event_type}</strong> — 역사 등장률 ${al.rate_pct}, 최장 ${al.longest_absence_tabs}탭(${al.longest_absence_days}일 추정) 연속 미등장</li>`;
+    }
+    html += '</ul></div>';
+    missingBanner.innerHTML = html;
+    missingBanner.classList.remove('hidden');
+  } else {
+    missingBanner.innerHTML = '<div class="alert" style="background:#d1fae5;color:#065f46;margin-bottom:10px">✅ 누락 이벤트 없음</div>';
+    missingBanner.classList.remove('hidden');
+  }
+
+  if ((a.new_event_alerts || []).length) {
+    let html = `<div class="alert" style="background:#eff6ff;color:#1e40af;margin-bottom:10px">
+      <strong>★ 신규 이벤트 ${a.new_event_alerts.length}건</strong>
+      <ul style="margin:8px 0 0 18px;padding:0">`;
+    for (const al of a.new_event_alerts) {
+      html += `<li><strong>${al.event_type}</strong> — 첫 등장 탭: ${al.first_seen}, ${al.count}/${al.total}탭 등장 (${al.rate_pct})</li>`;
+    }
+    html += '</ul></div>';
+    newBanner.innerHTML = html;
+    newBanner.classList.remove('hidden');
+  } else {
+    newBanner.classList.add('hidden');
+  }
+
+  // ── 요약 통계 ──────────────────────────────────────────────────────────
+  const summaryEl = document.getElementById('dp-summary');
+  summaryEl.classList.remove('hidden');
+  document.getElementById('dp-stats').innerHTML = `
+    <div class="stat-item"><span class="stat-label">분석 탭 수</span><span class="stat-val">${a.total_tabs}개</span></div>
+    <div class="stat-item"><span class="stat-label">기간</span><span class="stat-val">${a.tab_date_range?.first} ~ ${a.tab_date_range?.last}</span></div>
+    <div class="stat-item"><span class="stat-label">탭 간격</span><span class="stat-val">${a.interval_days}일</span></div>
+    <div class="stat-item"><span class="stat-label">탭당 평균 이벤트</span><span class="stat-val">${a.avg_events_per_tab}개</span></div>
+    <div class="stat-item"><span class="stat-label">최소/최대</span><span class="stat-val">${a.min_events_per_tab} / ${a.max_events_per_tab}</span></div>
+  `;
+
+  // ── 날짜 × 이벤트 매트릭스 ────────────────────────────────────────────
+  const matrixCard = document.getElementById('dp-matrix-card');
+  matrixCard.classList.remove('hidden');
+  const allTypes = a.all_event_types || [];
+  const dateMatrix = a.date_matrix || {};
+  const tabs = Object.keys(dateMatrix).sort();
+  // 최근 20탭만 표시 (너무 많으면 가로 스크롤 부담)
+  const displayTabs = tabs.slice(-20);
+
+  let tableHtml = `<table style="border-collapse:collapse;font-size:12px;white-space:nowrap">
+    <thead><tr>
+      <th style="padding:6px 10px;background:#f3f4f6;position:sticky;left:0;z-index:2;text-align:left;border:1px solid #e2e8f0">이벤트 유형</th>`;
+  for (const tab of displayTabs) {
+    tableHtml += `<th style="padding:6px 8px;background:#f3f4f6;text-align:center;border:1px solid #e2e8f0;font-weight:600">${tab}</th>`;
+  }
+  tableHtml += '</tr></thead><tbody>';
+
+  // 빈도 순 정렬된 이벤트 유형
+  const freqData = a.frequency || {};
+  const sortedTypes = [...allTypes].sort((x, y) => (freqData[y]?.rate || 0) - (freqData[x]?.rate || 0));
+  const PRIORITY_COLORS = { anchor: '#fef3c7', common: '#eff6ff', optional: '#f9fafb', rare: '#fff' };
+  const PRIORITY_LABEL  = { anchor: '❗', common: '⚠', optional: '〇', rare: '' };
+
+  for (const et of sortedTypes) {
+    const info = freqData[et] || {};
+    const rowBg = PRIORITY_COLORS[info.priority] || '#fff';
+    const icon  = PRIORITY_LABEL[info.priority]  || '';
+    tableHtml += `<tr>
+      <td style="padding:5px 10px;background:${rowBg};position:sticky;left:0;z-index:1;border:1px solid #e2e8f0;font-weight:${info.priority==='anchor'?'700':'400'}">
+        ${icon} ${et} <small style="color:#9ca3af">${info.rate_pct||''}</small>
+      </td>`;
+    for (const tab of displayTabs) {
+      const present = (dateMatrix[tab] || []).includes(et);
+      const cell = present
+        ? '<td style="text-align:center;background:#d1fae5;border:1px solid #e2e8f0">✅</td>'
+        : '<td style="text-align:center;background:#fff;color:#d1d5db;border:1px solid #e2e8f0">−</td>';
+      tableHtml += cell;
+    }
+    tableHtml += '</tr>';
+  }
+  tableHtml += '</tbody></table>';
+  if (tabs.length > 20) {
+    tableHtml = `<p style="font-size:12px;color:#6b7280;margin-bottom:6px">※ 최근 20탭만 표시 (전체 ${tabs.length}탭)</p>` + tableHtml;
+  }
+  document.getElementById('dp-matrix').innerHTML = tableHtml;
+
+  // ── 이벤트 빈도 바 차트 ────────────────────────────────────────────────
+  const freqCard = document.getElementById('dp-freq-card');
+  freqCard.classList.remove('hidden');
+  let freqHtml = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="background:#f3f4f6">
+      <th style="padding:8px;text-align:left;border-bottom:1px solid #e2e8f0">이벤트 유형</th>
+      <th style="padding:8px;text-align:left;border-bottom:1px solid #e2e8f0;min-width:180px">등장률</th>
+      <th style="padding:8px;text-align:center;border-bottom:1px solid #e2e8f0">횟수</th>
+      <th style="padding:8px;text-align:center;border-bottom:1px solid #e2e8f0">우선순위</th>
+      <th style="padding:8px;text-align:center;border-bottom:1px solid #e2e8f0">현재 상태</th>
+    </tr></thead><tbody>`;
+  for (const et of sortedTypes) {
+    const info = freqData[et] || {};
+    const streak = (a.streaks || {})[et] || {};
+    const filled = Math.round((info.rate || 0) * 10);
+    const bar = '█'.repeat(filled) + '○'.repeat(10 - filled);
+    const stateBadge = streak.current_state === '등장 중'
+      ? `<span style="background:#d1fae5;color:#065f46;padding:2px 7px;border-radius:12px;font-size:11px">▶ ${streak.current_streak}탭 연속 등장</span>`
+      : `<span style="background:#fee2e2;color:#991b1b;padding:2px 7px;border-radius:12px;font-size:11px">■ ${streak.current_streak}탭 연속 미등장</span>`;
+    const priorityBadge = {
+      anchor: '<span style="background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:12px;font-size:11px">❗ anchor</span>',
+      common: '<span style="background:#eff6ff;color:#1e40af;padding:2px 7px;border-radius:12px;font-size:11px">⚠ common</span>',
+      optional: '<span style="color:#6b7280;font-size:11px">〇 optional</span>',
+      rare: '<span style="color:#d1d5db;font-size:11px">rare</span>',
+    }[info.priority] || '';
+    freqHtml += `<tr style="border-bottom:1px solid #f3f4f6">
+      <td style="padding:8px;font-weight:${info.priority==='anchor'?'700':'400'}">${et}</td>
+      <td style="padding:8px;font-family:monospace;color:#374151">${bar} ${info.rate_pct}</td>
+      <td style="padding:8px;text-align:center;color:#6b7280">${info.count}/${info.total}</td>
+      <td style="padding:8px;text-align:center">${priorityBadge}</td>
+      <td style="padding:8px;text-align:center">${stateBadge}</td>
+    </tr>`;
+  }
+  freqHtml += '</tbody></table>';
+  document.getElementById('dp-freq').innerHTML = freqHtml;
+
+  // ── 월별 분포 ──────────────────────────────────────────────────────────
+  const monthlyCard = document.getElementById('dp-monthly-card');
+  monthlyCard.classList.remove('hidden');
+  const monthly = a.monthly_distribution || {};
+  const months = Object.keys(monthly).sort();
+  // 월별 컬럼: 최근 12개월
+  const displayMonths = months.slice(-12);
+  let mHtml = `<table style="border-collapse:collapse;font-size:12px;white-space:nowrap">
+    <thead><tr>
+      <th style="padding:6px 10px;background:#f3f4f6;position:sticky;left:0;z-index:2;text-align:left;border:1px solid #e2e8f0">이벤트 유형</th>`;
+  for (const m of displayMonths) {
+    const tc = monthly[m]?.tab_count || '';
+    mHtml += `<th style="padding:6px 8px;background:#f3f4f6;text-align:center;border:1px solid #e2e8f0">${m}<br><small style="color:#9ca3af">${tc}탭</small></th>`;
+  }
+  mHtml += '</tr></thead><tbody>';
+  for (const et of sortedTypes.filter(e => (freqData[e]?.priority || 'rare') !== 'rare')) {
+    mHtml += '<tr>';
+    mHtml += `<td style="padding:5px 10px;position:sticky;left:0;background:#fff;z-index:1;border:1px solid #e2e8f0">${et}</td>`;
+    for (const m of displayMonths) {
+      const cnt = (monthly[m]?.events || {})[et] || 0;
+      const tc  = monthly[m]?.tab_count || 1;
+      const pct = Math.round((cnt / tc) * 100);
+      const bg  = cnt === 0 ? '#fff' : `rgba(59,130,246,${0.1 + pct / 120})`;
+      mHtml += `<td style="text-align:center;background:${bg};border:1px solid #e2e8f0;padding:5px 8px">${cnt > 0 ? cnt : '−'}</td>`;
+    }
+    mHtml += '</tr>';
+  }
+  mHtml += '</tbody></table>';
+  document.getElementById('dp-monthly').innerHTML = mHtml;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 이벤트 기획 — ⑤ 출력
 // ═══════════════════════════════════════════════════════════════════════════
 async function epUploadGsheets() {
   const outputPath = document.getElementById('out-path').value.trim();
