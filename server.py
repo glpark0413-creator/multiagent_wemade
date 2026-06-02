@@ -20,14 +20,16 @@ from flask import (Flask, jsonify, request, send_file, render_template,
                    send_from_directory, Response, stream_with_context)
 
 # ── AI 클라이언트 설정 ───────────────────────────────────────────────────────
-# 우선순위: 1) 환경변수 OLLAMA_HOST  2) 로컬 Ollama 자동 감지  3) Claude API
+# 우선순위: 1) Claude CLI (subprocess)  2) Claude API  3) Ollama  4) none
 import os
+import shutil
+import subprocess
 import urllib.request
 
 HAS_AI     = False
 _AI        = None
 _ANTHROPIC = None
-AI_MODE    = "none"   # "ollama" | "anthropic" | "none"
+AI_MODE    = "none"   # "claude_cli" | "anthropic" | "ollama" | "none"
 
 OLLAMA_HOST  = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "")
@@ -42,18 +44,65 @@ def _detect_ollama_model(host: str) -> str:
     except Exception:
         return ""
 
-# 1) Ollama 자동 감지
-try:
-    from openai import OpenAI as _OpenAI
-    detected = OLLAMA_MODEL or _detect_ollama_model(OLLAMA_HOST)
-    if detected:
-        OLLAMA_MODEL = detected
-        _AI = _OpenAI(base_url=f"{OLLAMA_HOST.rstrip('/')}/v1", api_key="ollama")
-        HAS_AI  = True
-        AI_MODE = "ollama"
-        print(f"[PM] Ollama 연결: {OLLAMA_HOST}  모델: {OLLAMA_MODEL}")
-except Exception as e:
-    print(f"[PM] Ollama 감지 실패: {e}")
+# Windows에서 npm global bin의 claude.cmd 경로 자동 탐색
+def _find_claude_cmd() -> list | None:
+    """
+    claude 실행 커맨드 목록 반환.
+    Windows: npm global bin의 claude.cmd 우선, 없으면 PATH에서 탐색.
+    """
+    import platform
+    candidates = []
+    if platform.system() == "Windows":
+        # npm global prefix 경로 탐색
+        npm_global = os.path.expandvars(r"%APPDATA%\npm")
+        cmd_path = os.path.join(npm_global, "claude.cmd")
+        if os.path.exists(cmd_path):
+            candidates.append(["cmd", "/c", cmd_path])
+        # node_modules 직접 경로
+        exe_path = os.path.join(npm_global, "node_modules",
+                                "@anthropic-ai", "claude-code", "bin", "claude.exe")
+        if os.path.exists(exe_path):
+            candidates.append([exe_path])
+    # 공통: PATH에서 탐색
+    found = shutil.which("claude") or shutil.which("claude.cmd")
+    if found:
+        candidates.append(["cmd", "/c", found] if found.endswith(".cmd") else [found])
+    return candidates[0] if candidates else None
+
+_CLAUDE_CMD = _find_claude_cmd()
+
+def _call_claude_cli(prompt: str, timeout: int = 60) -> str:
+    """
+    claude CLI를 subprocess로 호출하여 응답 텍스트 반환.
+    Windows의 .cmd 래퍼도 자동으로 처리.
+    """
+    if not _CLAUDE_CMD:
+        raise RuntimeError("claude CLI를 찾을 수 없습니다.")
+    result = subprocess.run(
+        _CLAUDE_CMD + ["-p", prompt],
+        capture_output=True, text=True, encoding="utf-8",
+        timeout=timeout,
+    )
+    # stderr에 warning만 있어도 returncode=0이면 성공으로 처리
+    if result.returncode != 0 and not result.stdout.strip():
+        raise RuntimeError(f"claude CLI 오류: {result.stderr.strip()[:200]}")
+    return result.stdout.strip()
+
+# 1) Claude CLI 자동 감지 (최우선)
+if _CLAUDE_CMD:
+    try:
+        _test = subprocess.run(
+            _CLAUDE_CMD + ["-p", "숫자 1만 출력"],
+            capture_output=True, text=True, encoding="utf-8", timeout=20,
+        )
+        if _test.returncode == 0 and _test.stdout.strip():
+            HAS_AI  = True
+            AI_MODE = "claude_cli"
+            print(f"[PM] Claude CLI 연결 완료  ({_CLAUDE_CMD[0]})")
+        else:
+            print(f"[PM] Claude CLI 응답 없음: {_test.stderr.strip()[:100]}")
+    except Exception as _ce:
+        print(f"[PM] Claude CLI 테스트 실패: {_ce}")
 
 # 2) Claude API fallback
 if not HAS_AI:
@@ -64,7 +113,24 @@ if not HAS_AI:
         AI_MODE = "anthropic"
         print("[PM] Claude API 연결")
     except Exception:
-        print("[PM] AI 미설정 — 수동 제어 모드")
+        pass
+
+# 3) Ollama fallback
+if not HAS_AI:
+    try:
+        from openai import OpenAI as _OpenAI
+        detected = OLLAMA_MODEL or _detect_ollama_model(OLLAMA_HOST)
+        if detected:
+            OLLAMA_MODEL = detected
+            _AI = _OpenAI(base_url=f"{OLLAMA_HOST.rstrip('/')}/v1", api_key="ollama")
+            HAS_AI  = True
+            AI_MODE = "ollama"
+            print(f"[PM] Ollama 연결: {OLLAMA_HOST}  모델: {OLLAMA_MODEL}")
+    except Exception as e:
+        print(f"[PM] Ollama 감지 실패: {e}")
+
+if not HAS_AI:
+    print("[PM] AI 미설정 — 수동 제어 모드")
 
 # ── 경로 설정 ─────────────────────────────────────────────────────────────────
 BASE_DIR    = Path(__file__).resolve().parent
@@ -351,7 +417,15 @@ def _pm_process(user_msg: str, history: list, q: _queue_module.Queue):
 
     messages = history + [{"role": "user", "content": user_msg}]
 
-    if AI_MODE == "ollama":
+    if AI_MODE == "claude_cli":
+        # 대화 이력을 하나의 프롬프트로 결합
+        conv_lines = [f"[시스템 지침]\n{PM_SYSTEM}\n"]
+        for m in messages:
+            role = "사용자" if m["role"] == "user" else "PM"
+            conv_lines.append(f"[{role}] {m['content']}")
+        conv_lines.append("[PM] ")
+        raw = _call_claude_cli("\n".join(conv_lines), timeout=60)
+    elif AI_MODE == "ollama":
         resp = _AI.chat.completions.create(
             model=OLLAMA_MODEL,
             messages=[{"role": "system", "content": PM_SYSTEM}] + messages,
@@ -543,7 +617,7 @@ def _format_keyword_msg(genre: str, target_month: str, genre_kws: list, season_k
     return all_kws, "\n".join(lines)
 
 def _llm_generate_keywords(genre: str, target_month: str) -> tuple:
-    """LLM으로 키워드 생성 (Ollama JSON 강제 모드). 실패 시 하드코딩 풀로 폴백."""
+    """LLM으로 키워드 생성. 실패 시 하드코딩 풀로 폴백."""
     if not HAS_AI:
         return _build_keyword_suggestion_fallback(genre, target_month)
 
@@ -556,7 +630,9 @@ def _llm_generate_keywords(genre: str, target_month: str) -> tuple:
     )
 
     try:
-        if AI_MODE == "ollama":
+        if AI_MODE == "claude_cli":
+            raw = _call_claude_cli(prompt, timeout=60)
+        elif AI_MODE == "ollama":
             resp = _AI.chat.completions.create(
                 model=OLLAMA_MODEL,
                 messages=[{"role": "user", "content": prompt}],
@@ -1127,6 +1203,7 @@ def _run_localizer_pipeline(params: dict, q: _queue_module.Queue):
 def pm_status():
     return jsonify(has_ai=HAS_AI, ai_mode=AI_MODE,
                    ollama_model=OLLAMA_MODEL if AI_MODE == "ollama" else None,
+                   claude_cli=shutil.which("claude") is not None,
                    active_jobs=len(_jobs))
 
 
