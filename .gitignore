@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+venv/
+.env
+*.log
+
+# 다운로드 캐시 및 임시 파일
+output/gdrive_cache/
+output/projects/*/work/*.json
+output/projects/*/file/
+output/handoff/
+output/json/
+
+# 학습 데이터 (민감 정보 제외)
+# output/learnings/ 는 포함 (패턴 데이터 공유)
+
+# Excel 소스 파일 (용량 문제)
+*.xlsx
+*.xls
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp

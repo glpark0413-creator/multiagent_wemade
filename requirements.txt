@@ -1,0 +1,23 @@
+# 멀티 에이전트 공통 의존성
+
+# Google API
+google-api-python-client>=2.100.0
+google-auth>=2.23.0
+google-auth-httplib2>=0.1.1
+google-auth-oauthlib>=1.1.0
+gspread>=6.0.0
+
+# Excel / 스프레드시트
+openpyxl>=3.1.0
+pandas>=2.0.0
+xlsxwriter>=3.1.0
+
+# 웹 서버
+flask>=3.0.0
+
+# PM AI 브레인 (둘 중 하나 선택)
+anthropic>=0.30.0   # Claude API 사용 시
+openai>=1.0.0       # Ollama 사용 시 (OpenAI 호환 클라이언트)
+
+# 유틸리티
+scipy>=1.11.0

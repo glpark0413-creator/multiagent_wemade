@@ -1,0 +1,3941 @@
+{
+  "scanned_at": "2026-06-01T16:40:44",
+  "source": "C:\\Users\\glpark0413\\Desktop\\업무 자동화-20260521T024618Z-3-001\\업무 자동화\\실 업무\\Multi_agent\\output\\event-planner\\file\\이벤트기획_20260601.xlsx",
+  "event_type_patterns": {
+    "기타": {
+      "seen_count": 2,
+      "seen_tabs": [
+        "260701",
+        "260715"
+      ],
+      "top_reward_names": [],
+      "reward_type_frequency": {},
+      "quantity_stats": {},
+      "recent_compositions": []
+    },
+    "포인트레이스_이벤트": {
+      "seen_count": 2,
+      "seen_tabs": [
+        "260701",
+        "260715"
+      ],
+      "top_reward_names": [
+        "골드",
+        "고급 선수카드 팩 티켓",
+        "스태미나",
+        "PP",
+        "다이아 스페셜 훈련권"
+      ],
+      "reward_type_frequency": {
+        "골드": 12,
+        "다이아": 8,
+        "PP": 4,
+        "선수 카드": 8,
+        "기타": 8,
+        "강화권": 2,
+        "팩 티켓": 2
+      },
+      "quantity_stats": {
+        "골드": {
+          "min": 50000,
+          "max": 300000,
+          "avg": 162500,
+          "samples": 8
+        },
+        "다이아": {
+          "min": 500,
+          "max": 500,
+          "avg": 500,
+          "samples": 2
+        },
+        "PP": {
+          "min": 10000,
+          "max": 30000,
+          "avg": 20000,
+          "samples": 4
+        },
+        "선수 카드": {
+          "min": 10,
+          "max": 20,
+          "avg": 15,
+          "samples": 4
+        },
+        "강화권": {
+          "min": 30,
+          "max": 30,
+          "avg": 30,
+          "samples": 2
+        },
+        "기타": {
+          "min": 200,
+          "max": 300,
+          "avg": 267,
+          "samples": 6
+        },
+        "팩 티켓": {
+          "min": 10,
+          "max": 10,
+          "avg": 10,
+          "samples": 2
+        }
+      },
+      "recent_compositions": [
+        {
+          "tab": "260701",
+          "event_title": "1. 포인트 레이스 이벤트",
+          "rewards": [
+            {
+              "reward_name": "골드",
+              "reward_type": "골드",
+              "quantity": {
+                "value": 100000,
+                "unit": "",
+                "raw": "100000",
+                "confidence": "high"
+              },
+              "cell": "C28",
+              "quantity_cell": "D28"
+            },
+            {
+              "reward_name": "골드 트레잇 획득권",
+              "reward_type": "골드",
+              "quantity": null,
+              "cell": "C29",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "골드 트레잇 변경권",
+              "reward_type": "골드",
+              "quantity": null,
+              "cell": "C30",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "다이아",
+              "reward_type": "다이아",
+              "quantity": {
+                "value": 500,
+                "unit": "",
+                "raw": "500",
+                "confidence": "high"
+              },
+              "cell": "C31",
+              "quantity_cell": "D31"
+            },
+            {
+              "reward_name": "PP",
+              "reward_type": "PP",
+              "quantity": {
+                "value": 30000,
+                "unit": "",
+                "raw": "30000",
+                "confidence": "high"
+              },
+              "cell": "C32",
+              "quantity_cell": "D32"
+            },
+            {
+              "reward_name": "다이아 스페셜 훈련권",
+              "reward_type": "다이아",
+              "quantity": null,
+              "cell": "C33",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "고급 선수 카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "cell": "C34",
+              "quantity_cell": "D34"
+            },
+            {
+              "reward_name": "∎ 이벤트 보상",
+              "reward_type": "기타",
+              "quantity": null,
+              "cell": "C37",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "골드",
+              "reward_type": "골드",
+              "quantity": {
+                "value": 300000,
+                "unit": "",
+                "raw": "300000",
+                "confidence": "high"
+              },
+              "cell": "G39",
+              "quantity_cell": "I39"
+            },
+            {
+              "reward_name": "다이아 스페셜 훈련권",
+              "reward_type": "다이아",
+              "quantity": null,
+              "cell": "G40",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "고급 선수카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": {
+                "value": 10,
+                "unit": "",
+                "raw": "10",
+                "confidence": "high"
+              },
+              "cell": "G41",
+              "quantity_cell": "I41"
+            },
+            {
+              "reward_name": "ALL 강화권(S)",
+              "reward_type": "강화권",
+              "quantity": {
+                "value": 30,
+                "unit": "",
+                "raw": "30",
+                "confidence": "high"
+              },
+              "cell": "G42",
+              "quantity_cell": "I42"
+            },
+            {
+              "reward_name": "고급 선수카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": null,
+              "cell": "G43",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "골드",
+              "reward_type": "골드",
+              "quantity": {
+                "value": 200000,
+                "unit": "",
+                "raw": "200000",
+                "confidence": "high"
+              },
+              "cell": "G44",
+              "quantity_cell": "I44"
+            },
+            {
+              "reward_name": "15-26 리그 선택 다이아 확정 팩",
+              "reward_type": "다이아",
+              "quantity": null,
+              "cell": "G45",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "스태미나",
+              "reward_type": "기타",
+              "quantity": {
+                "value": 300,
+                "unit": "",
+                "raw": "300",
+                "confidence": "high"
+              },
+              "cell": "G46",
+              "quantity_cell": "I46"
+            },
+            {
+              "reward_name": "컨셉카드 선수팩 티켓",
+              "reward_type": "팩 티켓",
+              "quantity": {
+                "value": 10,
+                "unit": "",
+                "raw": "10",
+                "confidence": "high"
+              },
+              "cell": "G47",
+              "quantity_cell": "I47"
+            },
+            {
+              "reward_name": "스태미나",
+              "reward_type": "기타",
+              "quantity": {
+                "value": 300,
+                "unit": "",
+                "raw": "300",
+                "confidence": "high"
+              },
+              "cell": "G48",
+              "quantity_cell": "I48"
+            },
+            {
+              "reward_name": "PP",
+              "reward_type": "PP",
+              "quantity": {
+                "value": 10000,
+                "unit": "",
+                "raw": "10000",
+                "confidence": "high"
+              },
+              "cell": "G49",
+              "quantity_cell": "I49"
+            },
+            {
+              "reward_name": "고급 선수카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": null,
+              "cell": "G50",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "스태미나",
+              "reward_type": "기타",
+              "quantity": {
+                "value": 200,
+                "unit": "",
+                "raw": "200",
+                "confidence": "high"
+              },
+              "cell": "G51",
+              "quantity_cell": "I51"
+            },
+            {
+              "reward_name": "골드",
+              "reward_type": "골드",
+              "quantity": {
+                "value": 50000,
+                "unit": "",
+                "raw": "50000",
+                "confidence": "high"
+              },
+              "cell": "G52",
+              "quantity_cell": "I52"
+            }
+          ]
+        },
+        {
+          "tab": "260715",
+          "event_title": "1. 포인트 레이스 이벤트",
+          "rewards": [
+            {
+              "reward_name": "골드",
+              "reward_type": "골드",
+              "quantity": {
+                "value": 100000,
+                "unit": "",
+                "raw": "100000",
+                "confidence": "high"
+              },
+              "cell": "C28",
+              "quantity_cell": "D28"
+            },
+            {
+              "reward_name": "골드 트레잇 획득권",
+              "reward_type": "골드",
+              "quantity": null,
+              "cell": "C29",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "골드 트레잇 변경권",
+              "reward_type": "골드",
+              "quantity": null,
+              "cell": "C30",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "다이아",
+              "reward_type": "다이아",
+              "quantity": {
+                "value": 500,
+                "unit": "",
+                "raw": "500",
+                "confidence": "high"
+              },
+              "cell": "C31",
+              "quantity_cell": "D31"
+            },
+            {
+              "reward_name": "PP",
+              "reward_type": "PP",
+              "quantity": {
+                "value": 30000,
+                "unit": "",
+                "raw": "30000",
+                "confidence": "high"
+              },
+              "cell": "C32",
+              "quantity_cell": "D32"
+            },
+            {
+              "reward_name": "다이아 스페셜 훈련권",
+              "reward_type": "다이아",
+              "quantity": null,
+              "cell": "C33",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "고급 선수 카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "cell": "C34",
+              "quantity_cell": "D34"
+            },
+            {
+              "reward_name": "∎ 이벤트 보상",
+              "reward_type": "기타",
+              "quantity": null,
+              "cell": "C37",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "골드",
+              "reward_type": "골드",
+              "quantity": {
+                "value": 300000,
+                "unit": "",
+                "raw": "300000",
+                "confidence": "high"
+              },
+              "cell": "G39",
+              "quantity_cell": "I39"
+            },
+            {
+              "reward_name": "다이아 스페셜 훈련권",
+              "reward_type": "다이아",
+              "quantity": null,
+              "cell": "G40",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "고급 선수카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": {
+                "value": 10,
+                "unit": "",
+                "raw": "10",
+                "confidence": "high"
+              },
+              "cell": "G41",
+              "quantity_cell": "I41"
+            },
+            {
+              "reward_name": "ALL 강화권(S)",
+              "reward_type": "강화권",
+              "quantity": {
+                "value": 30,
+                "unit": "",
+                "raw": "30",
+                "confidence": "high"
+              },
+              "cell": "G42",
+              "quantity_cell": "I42"
+            },
+            {
+              "reward_name": "고급 선수카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": null,
+              "cell": "G43",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "골드",
+              "reward_type": "골드",
+              "quantity": {
+                "value": 200000,
+                "unit": "",
+                "raw": "200000",
+                "confidence": "high"
+              },
+              "cell": "G44",
+              "quantity_cell": "I44"
+            },
+            {
+              "reward_name": "15-26 리그 선택 다이아 확정 팩",
+              "reward_type": "다이아",
+              "quantity": null,
+              "cell": "G45",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "스태미나",
+              "reward_type": "기타",
+              "quantity": {
+                "value": 300,
+                "unit": "",
+                "raw": "300",
+                "confidence": "high"
+              },
+              "cell": "G46",
+              "quantity_cell": "I46"
+            },
+            {
+              "reward_name": "컨셉카드 선수팩 티켓",
+              "reward_type": "팩 티켓",
+              "quantity": {
+                "value": 10,
+                "unit": "",
+                "raw": "10",
+                "confidence": "high"
+              },
+              "cell": "G47",
+              "quantity_cell": "I47"
+            },
+            {
+              "reward_name": "스태미나",
+              "reward_type": "기타",
+              "quantity": {
+                "value": 300,
+                "unit": "",
+                "raw": "300",
+                "confidence": "high"
+              },
+              "cell": "G48",
+              "quantity_cell": "I48"
+            },
+            {
+              "reward_name": "PP",
+              "reward_type": "PP",
+              "quantity": {
+                "value": 10000,
+                "unit": "",
+                "raw": "10000",
+                "confidence": "high"
+              },
+              "cell": "G49",
+              "quantity_cell": "I49"
+            },
+            {
+              "reward_name": "고급 선수카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": null,
+              "cell": "G50",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "스태미나",
+              "reward_type": "기타",
+              "quantity": {
+                "value": 200,
+                "unit": "",
+                "raw": "200",
+                "confidence": "high"
+              },
+              "cell": "G51",
+              "quantity_cell": "I51"
+            },
+            {
+              "reward_name": "골드",
+              "reward_type": "골드",
+              "quantity": {
+                "value": 50000,
+                "unit": "",
+                "raw": "50000",
+                "confidence": "high"
+              },
+              "cell": "G52",
+              "quantity_cell": "I52"
+            }
+          ]
+        }
+      ]
+    },
+    "룰렛_이벤트": {
+      "seen_count": 2,
+      "seen_tabs": [
+        "260701",
+        "260715"
+      ],
+      "top_reward_names": [
+        "15-26 구단 지정 프리즘 다이아 10% 팩 (리그 선택)",
+        "최상급 선수카드 팩 티켓",
+        "고급 선수카드 팩 티켓",
+        "PP",
+        "일반 선수카드 팩 티켓"
+      ],
+      "reward_type_frequency": {
+        "다이아": 2,
+        "선수 카드": 6,
+        "PP": 2,
+        "행동력": 2,
+        "골드": 2,
+        "XP": 2
+      },
+      "quantity_stats": {
+        "선수 카드": {
+          "min": 20,
+          "max": 30,
+          "avg": 25,
+          "samples": 4
+        },
+        "PP": {
+          "min": 30000,
+          "max": 30000,
+          "avg": 30000,
+          "samples": 2
+        },
+        "행동력": {
+          "min": 300,
+          "max": 300,
+          "avg": 300,
+          "samples": 2
+        },
+        "골드": {
+          "min": 100000,
+          "max": 100000,
+          "avg": 100000,
+          "samples": 2
+        },
+        "XP": {
+          "min": 20000,
+          "max": 20000,
+          "avg": 20000,
+          "samples": 2
+        }
+      },
+      "recent_compositions": [
+        {
+          "tab": "260701",
+          "event_title": "2. 룰렛 이벤트",
+          "rewards": [
+            {
+              "reward_name": "15-26 구단 지정 프리즘 다이아 10% 팩 (리그 선택)",
+              "reward_type": "다이아",
+              "quantity": null,
+              "cell": "C76",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "최상급 선수카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": null,
+              "cell": "C77",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "고급 선수카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "cell": "C78",
+              "quantity_cell": "E78"
+            },
+            {
+              "reward_name": "PP",
+              "reward_type": "PP",
+              "quantity": {
+                "value": 30000,
+                "unit": "",
+                "raw": "30000",
+                "confidence": "high"
+              },
+              "cell": "C79",
+              "quantity_cell": "E79"
+            },
+            {
+              "reward_name": "일반 선수카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": {
+                "value": 30,
+                "unit": "",
+                "raw": "30",
+                "confidence": "high"
+              },
+              "cell": "C80",
+              "quantity_cell": "E80"
+            },
+            {
+              "reward_name": "행동력",
+              "reward_type": "행동력",
+              "quantity": {
+                "value": 300,
+                "unit": "",
+                "raw": "300",
+                "confidence": "high"
+              },
+              "cell": "C81",
+              "quantity_cell": "E81"
+            },
+            {
+              "reward_name": "골드",
+              "reward_type": "골드",
+              "quantity": {
+                "value": 100000,
+                "unit": "",
+                "raw": "100000",
+                "confidence": "high"
+              },
+              "cell": "C82",
+              "quantity_cell": "E82"
+            },
+            {
+              "reward_name": "XP",
+              "reward_type": "XP",
+              "quantity": {
+                "value": 20000,
+                "unit": "",
+                "raw": "20000",
+                "confidence": "high"
+              },
+              "cell": "C83",
+              "quantity_cell": "E83"
+            }
+          ]
+        },
+        {
+          "tab": "260715",
+          "event_title": "2. 룰렛 이벤트",
+          "rewards": [
+            {
+              "reward_name": "15-26 구단 지정 프리즘 다이아 10% 팩 (리그 선택)",
+              "reward_type": "다이아",
+              "quantity": null,
+              "cell": "C76",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "최상급 선수카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": null,
+              "cell": "C77",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "고급 선수카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "cell": "C78",
+              "quantity_cell": "E78"
+            },
+            {
+              "reward_name": "PP",
+              "reward_type": "PP",
+              "quantity": {
+                "value": 30000,
+                "unit": "",
+                "raw": "30000",
+                "confidence": "high"
+              },
+              "cell": "C79",
+              "quantity_cell": "E79"
+            },
+            {
+              "reward_name": "일반 선수카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": {
+                "value": 30,
+                "unit": "",
+                "raw": "30",
+                "confidence": "high"
+              },
+              "cell": "C80",
+              "quantity_cell": "E80"
+            },
+            {
+              "reward_name": "행동력",
+              "reward_type": "행동력",
+              "quantity": {
+                "value": 300,
+                "unit": "",
+                "raw": "300",
+                "confidence": "high"
+              },
+              "cell": "C81",
+              "quantity_cell": "E81"
+            },
+            {
+              "reward_name": "골드",
+              "reward_type": "골드",
+              "quantity": {
+                "value": 100000,
+                "unit": "",
+                "raw": "100000",
+                "confidence": "high"
+              },
+              "cell": "C82",
+              "quantity_cell": "E82"
+            },
+            {
+              "reward_name": "XP",
+              "reward_type": "XP",
+              "quantity": {
+                "value": 20000,
+                "unit": "",
+                "raw": "20000",
+                "confidence": "high"
+              },
+              "cell": "C83",
+              "quantity_cell": "E83"
+            }
+          ]
+        }
+      ]
+    },
+    "빙고_이벤트": {
+      "seen_count": 2,
+      "seen_tabs": [
+        "260701",
+        "260715"
+      ],
+      "top_reward_names": [
+        "진 선수 특별 다이아 팩",
+        "골드",
+        "다이아",
+        "다이아 스페셜 훈련권",
+        "고급 선수 카드 팩 티켓"
+      ],
+      "reward_type_frequency": {
+        "다이아": 28,
+        "골드": 12,
+        "강화권": 6,
+        "기타": 2,
+        "XP": 4,
+        "PP": 4,
+        "선수 카드": 12
+      },
+      "quantity_stats": {
+        "골드": {
+          "min": 10000,
+          "max": 500000,
+          "avg": 140000,
+          "samples": 8
+        },
+        "다이아": {
+          "min": 10,
+          "max": 500,
+          "avg": 166,
+          "samples": 14
+        },
+        "강화권": {
+          "min": 20,
+          "max": 20,
+          "avg": 20,
+          "samples": 6
+        },
+        "XP": {
+          "min": 2000,
+          "max": 3000,
+          "avg": 2500,
+          "samples": 4
+        },
+        "PP": {
+          "min": 1000,
+          "max": 2000,
+          "avg": 1500,
+          "samples": 4
+        },
+        "선수 카드": {
+          "min": 10,
+          "max": 30,
+          "avg": 20,
+          "samples": 6
+        }
+      },
+      "recent_compositions": [
+        {
+          "tab": "260701",
+          "event_title": "3. 빙고 이벤트",
+          "rewards": [
+            {
+              "reward_name": "진 선수 특별 다이아 팩",
+              "reward_type": "다이아",
+              "quantity": null,
+              "cell": "E104",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "골드",
+              "reward_type": "골드",
+              "quantity": {
+                "value": 500000,
+                "unit": "",
+                "raw": "500000",
+                "confidence": "high"
+              },
+              "cell": "E105",
+              "quantity_cell": "F105"
+            },
+            {
+              "reward_name": "다이아",
+              "reward_type": "다이아",
+              "quantity": {
+                "value": 500,
+                "unit": "",
+                "raw": "500",
+                "confidence": "high"
+              },
+              "cell": "E106",
+              "quantity_cell": "F106"
+            },
+            {
+              "reward_name": "다이아 스페셜 훈련권",
+              "reward_type": "다이아",
+              "quantity": null,
+              "cell": "E107",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "ALL 강화권(S)",
+              "reward_type": "강화권",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "cell": "E108",
+              "quantity_cell": "F108"
+            },
+            {
+              "reward_name": "다이아 트레잇 변경권",
+              "reward_type": "다이아",
+              "quantity": null,
+              "cell": "E109",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "진 선수 특별 다이아 팩",
+              "reward_type": "다이아",
+              "quantity": {
+                "value": 10,
+                "unit": "",
+                "raw": "10",
+                "confidence": "high"
+              },
+              "cell": "E110",
+              "quantity_cell": "F110"
+            },
+            {
+              "reward_name": "진 선수 특별 다이아 팩",
+              "reward_type": "다이아",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "cell": "E111",
+              "quantity_cell": "F111"
+            },
+            {
+              "reward_name": "진 선수 특별 다이아 팩",
+              "reward_type": "다이아",
+              "quantity": {
+                "value": 30,
+                "unit": "",
+                "raw": "30",
+                "confidence": "high"
+              },
+              "cell": "E112",
+              "quantity_cell": "F112"
+            },
+            {
+              "reward_name": "ALL 강화권(A)",
+              "reward_type": "강화권",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "cell": "E113",
+              "quantity_cell": "F113"
+            },
+            {
+              "reward_name": "ALL 강화권(B)",
+              "reward_type": "강화권",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "cell": "E114",
+              "quantity_cell": "F114"
+            },
+            {
+              "reward_name": "빅딜 도전권",
+              "reward_type": "기타",
+              "quantity": null,
+              "cell": "E115",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "다이아 스페셜 훈련권",
+              "reward_type": "다이아",
+              "quantity": null,
+              "cell": "E116",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "다이아 스페셜 훈련권",
+              "reward_type": "다이아",
+              "quantity": null,
+              "cell": "E117",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "다이아 스페셜 훈련권",
+              "reward_type": "다이아",
+              "quantity": null,
+              "cell": "E118",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "다이아",
+              "reward_type": "다이아",
+              "quantity": {
+                "value": 100,
+                "unit": "",
+                "raw": "100",
+                "confidence": "high"
+              },
+              "cell": "E119",
+              "quantity_cell": "F119"
+            },
+            {
+              "reward_name": "다이아",
+              "reward_type": "다이아",
+              "quantity": {
+                "value": 200,
+                "unit": "",
+                "raw": "200",
+                "confidence": "high"
+              },
+              "cell": "E120",
+              "quantity_cell": "F120"
+            },
+            {
+              "reward_name": "다이아",
+              "reward_type": "다이아",
+              "quantity": {
+                "value": 300,
+                "unit": "",
+                "raw": "300",
+                "confidence": "high"
+              },
+              "cell": "E121",
+              "quantity_cell": "F121"
+            },
+            {
+              "reward_name": "골드",
+              "reward_type": "골드",
+              "quantity": {
+                "value": 10000,
+                "unit": "",
+                "raw": "10000",
+                "confidence": "high"
+              },
+              "cell": "E122",
+              "quantity_cell": "F122"
+            },
+            {
+              "reward_name": "골드",
+              "reward_type": "골드",
+              "quantity": {
+                "value": 20000,
+                "unit": "",
+                "raw": "20000",
+                "confidence": "high"
+              },
+              "cell": "E123",
+              "quantity_cell": "F123"
+            },
+            {
+              "reward_name": "골드",
+              "reward_type": "골드",
+              "quantity": {
+                "value": 30000,
+                "unit": "",
+                "raw": "30000",
+                "confidence": "high"
+              },
+              "cell": "E124",
+              "quantity_cell": "F124"
+            },
+            {
+              "reward_name": "XP",
+              "reward_type": "XP",
+              "quantity": {
+                "value": 2000,
+                "unit": "",
+                "raw": "2000",
+                "confidence": "high"
+              },
+              "cell": "E125",
+              "quantity_cell": "F125"
+            },
+            {
+              "reward_name": "XP",
+              "reward_type": "XP",
+              "quantity": {
+                "value": 3000,
+                "unit": "",
+                "raw": "3000",
+                "confidence": "high"
+              },
+              "cell": "E126",
+              "quantity_cell": "F126"
+            },
+            {
+              "reward_name": "PP",
+              "reward_type": "PP",
+              "quantity": {
+                "value": 1000,
+                "unit": "",
+                "raw": "1000",
+                "confidence": "high"
+              },
+              "cell": "E127",
+              "quantity_cell": "F127"
+            },
+            {
+              "reward_name": "PP",
+              "reward_type": "PP",
+              "quantity": {
+                "value": 2000,
+                "unit": "",
+                "raw": "2000",
+                "confidence": "high"
+              },
+              "cell": "E128",
+              "quantity_cell": "F128"
+            },
+            {
+              "reward_name": "골드 트레잇 변경권",
+              "reward_type": "골드",
+              "quantity": null,
+              "cell": "E129",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "골드 트레잇 변경권",
+              "reward_type": "골드",
+              "quantity": null,
+              "cell": "E130",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "다이아 트레잇 변경권",
+              "reward_type": "다이아",
+              "quantity": null,
+              "cell": "E131",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "고급 선수 카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": null,
+              "cell": "E132",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "고급 선수 카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": null,
+              "cell": "E133",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "고급 선수 카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": null,
+              "cell": "E134",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "일반 선수 카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": {
+                "value": 10,
+                "unit": "",
+                "raw": "10",
+                "confidence": "high"
+              },
+              "cell": "E135",
+              "quantity_cell": "F135"
+            },
+            {
+              "reward_name": "일반 선수 카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "cell": "E136",
+              "quantity_cell": "F136"
+            },
+            {
+              "reward_name": "일반 선수 카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": {
+                "value": 30,
+                "unit": "",
+                "raw": "30",
+                "confidence": "high"
+              },
+              "cell": "E137",
+              "quantity_cell": "F137"
+            }
+          ]
+        },
+        {
+          "tab": "260715",
+          "event_title": "3. 빙고 이벤트",
+          "rewards": [
+            {
+              "reward_name": "진 선수 특별 다이아 팩",
+              "reward_type": "다이아",
+              "quantity": null,
+              "cell": "E104",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "골드",
+              "reward_type": "골드",
+              "quantity": {
+                "value": 500000,
+                "unit": "",
+                "raw": "500000",
+                "confidence": "high"
+              },
+              "cell": "E105",
+              "quantity_cell": "F105"
+            },
+            {
+              "reward_name": "다이아",
+              "reward_type": "다이아",
+              "quantity": {
+                "value": 500,
+                "unit": "",
+                "raw": "500",
+                "confidence": "high"
+              },
+              "cell": "E106",
+              "quantity_cell": "F106"
+            },
+            {
+              "reward_name": "다이아 스페셜 훈련권",
+              "reward_type": "다이아",
+              "quantity": null,
+              "cell": "E107",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "ALL 강화권(S)",
+              "reward_type": "강화권",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "cell": "E108",
+              "quantity_cell": "F108"
+            },
+            {
+              "reward_name": "다이아 트레잇 변경권",
+              "reward_type": "다이아",
+              "quantity": null,
+              "cell": "E109",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "진 선수 특별 다이아 팩",
+              "reward_type": "다이아",
+              "quantity": {
+                "value": 10,
+                "unit": "",
+                "raw": "10",
+                "confidence": "high"
+              },
+              "cell": "E110",
+              "quantity_cell": "F110"
+            },
+            {
+              "reward_name": "진 선수 특별 다이아 팩",
+              "reward_type": "다이아",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "cell": "E111",
+              "quantity_cell": "F111"
+            },
+            {
+              "reward_name": "진 선수 특별 다이아 팩",
+              "reward_type": "다이아",
+              "quantity": {
+                "value": 30,
+                "unit": "",
+                "raw": "30",
+                "confidence": "high"
+              },
+              "cell": "E112",
+              "quantity_cell": "F112"
+            },
+            {
+              "reward_name": "ALL 강화권(A)",
+              "reward_type": "강화권",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "cell": "E113",
+              "quantity_cell": "F113"
+            },
+            {
+              "reward_name": "ALL 강화권(B)",
+              "reward_type": "강화권",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "cell": "E114",
+              "quantity_cell": "F114"
+            },
+            {
+              "reward_name": "빅딜 도전권",
+              "reward_type": "기타",
+              "quantity": null,
+              "cell": "E115",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "다이아 스페셜 훈련권",
+              "reward_type": "다이아",
+              "quantity": null,
+              "cell": "E116",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "다이아 스페셜 훈련권",
+              "reward_type": "다이아",
+              "quantity": null,
+              "cell": "E117",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "다이아 스페셜 훈련권",
+              "reward_type": "다이아",
+              "quantity": null,
+              "cell": "E118",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "다이아",
+              "reward_type": "다이아",
+              "quantity": {
+                "value": 100,
+                "unit": "",
+                "raw": "100",
+                "confidence": "high"
+              },
+              "cell": "E119",
+              "quantity_cell": "F119"
+            },
+            {
+              "reward_name": "다이아",
+              "reward_type": "다이아",
+              "quantity": {
+                "value": 200,
+                "unit": "",
+                "raw": "200",
+                "confidence": "high"
+              },
+              "cell": "E120",
+              "quantity_cell": "F120"
+            },
+            {
+              "reward_name": "다이아",
+              "reward_type": "다이아",
+              "quantity": {
+                "value": 300,
+                "unit": "",
+                "raw": "300",
+                "confidence": "high"
+              },
+              "cell": "E121",
+              "quantity_cell": "F121"
+            },
+            {
+              "reward_name": "골드",
+              "reward_type": "골드",
+              "quantity": {
+                "value": 10000,
+                "unit": "",
+                "raw": "10000",
+                "confidence": "high"
+              },
+              "cell": "E122",
+              "quantity_cell": "F122"
+            },
+            {
+              "reward_name": "골드",
+              "reward_type": "골드",
+              "quantity": {
+                "value": 20000,
+                "unit": "",
+                "raw": "20000",
+                "confidence": "high"
+              },
+              "cell": "E123",
+              "quantity_cell": "F123"
+            },
+            {
+              "reward_name": "골드",
+              "reward_type": "골드",
+              "quantity": {
+                "value": 30000,
+                "unit": "",
+                "raw": "30000",
+                "confidence": "high"
+              },
+              "cell": "E124",
+              "quantity_cell": "F124"
+            },
+            {
+              "reward_name": "XP",
+              "reward_type": "XP",
+              "quantity": {
+                "value": 2000,
+                "unit": "",
+                "raw": "2000",
+                "confidence": "high"
+              },
+              "cell": "E125",
+              "quantity_cell": "F125"
+            },
+            {
+              "reward_name": "XP",
+              "reward_type": "XP",
+              "quantity": {
+                "value": 3000,
+                "unit": "",
+                "raw": "3000",
+                "confidence": "high"
+              },
+              "cell": "E126",
+              "quantity_cell": "F126"
+            },
+            {
+              "reward_name": "PP",
+              "reward_type": "PP",
+              "quantity": {
+                "value": 1000,
+                "unit": "",
+                "raw": "1000",
+                "confidence": "high"
+              },
+              "cell": "E127",
+              "quantity_cell": "F127"
+            },
+            {
+              "reward_name": "PP",
+              "reward_type": "PP",
+              "quantity": {
+                "value": 2000,
+                "unit": "",
+                "raw": "2000",
+                "confidence": "high"
+              },
+              "cell": "E128",
+              "quantity_cell": "F128"
+            },
+            {
+              "reward_name": "골드 트레잇 변경권",
+              "reward_type": "골드",
+              "quantity": null,
+              "cell": "E129",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "골드 트레잇 변경권",
+              "reward_type": "골드",
+              "quantity": null,
+              "cell": "E130",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "다이아 트레잇 변경권",
+              "reward_type": "다이아",
+              "quantity": null,
+              "cell": "E131",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "고급 선수 카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": null,
+              "cell": "E132",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "고급 선수 카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": null,
+              "cell": "E133",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "고급 선수 카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": null,
+              "cell": "E134",
+              "quantity_cell": null
+            },
+            {
+              "reward_name": "일반 선수 카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": {
+                "value": 10,
+                "unit": "",
+                "raw": "10",
+                "confidence": "high"
+              },
+              "cell": "E135",
+              "quantity_cell": "F135"
+            },
+            {
+              "reward_name": "일반 선수 카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "cell": "E136",
+              "quantity_cell": "F136"
+            },
+            {
+              "reward_name": "일반 선수 카드 팩 티켓",
+              "reward_type": "선수 카드",
+              "quantity": {
+                "value": 30,
+                "unit": "",
+                "raw": "30",
+                "confidence": "high"
+              },
+              "cell": "E137",
+              "quantity_cell": "F137"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "per_tab_sections": {
+    "260701": [
+      {
+        "title": "06.18_ Event",
+        "event_type": "기타",
+        "title_cell": "B3",
+        "start_row": 3,
+        "end_row": 5,
+        "reward_count": 0,
+        "reward_rows": []
+      },
+      {
+        "title": "1. 포인트 레이스 이벤트",
+        "event_type": "포인트레이스_이벤트",
+        "title_cell": "B6",
+        "start_row": 6,
+        "end_row": 55,
+        "reward_count": 22,
+        "reward_rows": [
+          {
+            "cell": "C28",
+            "col": 3,
+            "row": 28,
+            "reward_name": "골드",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "D28",
+              "col": 4,
+              "value": "100000",
+              "quantity": {
+                "value": 100000,
+                "unit": "",
+                "raw": "100000",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C29",
+            "col": 3,
+            "row": 29,
+            "reward_name": "골드 트레잇 획득권",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C30",
+            "col": 3,
+            "row": 30,
+            "reward_name": "골드 트레잇 변경권",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C31",
+            "col": 3,
+            "row": 31,
+            "reward_name": "다이아",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "D31",
+              "col": 4,
+              "value": "500",
+              "quantity": {
+                "value": 500,
+                "unit": "",
+                "raw": "500",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C32",
+            "col": 3,
+            "row": 32,
+            "reward_name": "PP",
+            "reward_type": "PP",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "D32",
+              "col": 4,
+              "value": "30000",
+              "quantity": {
+                "value": 30000,
+                "unit": "",
+                "raw": "30000",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C33",
+            "col": 3,
+            "row": 33,
+            "reward_name": "다이아 스페셜 훈련권",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C34",
+            "col": 3,
+            "row": 34,
+            "reward_name": "고급 선수 카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "D34",
+              "col": 4,
+              "value": "20",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C37",
+            "col": 3,
+            "row": 37,
+            "reward_name": "∎ 이벤트 보상",
+            "reward_type": "기타",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G39",
+            "col": 7,
+            "row": 39,
+            "reward_name": "골드",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "I39",
+              "col": 9,
+              "value": "300000",
+              "quantity": {
+                "value": 300000,
+                "unit": "",
+                "raw": "300000",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G40",
+            "col": 7,
+            "row": 40,
+            "reward_name": "다이아 스페셜 훈련권",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G41",
+            "col": 7,
+            "row": 41,
+            "reward_name": "고급 선수카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "I41",
+              "col": 9,
+              "value": "10",
+              "quantity": {
+                "value": 10,
+                "unit": "",
+                "raw": "10",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G42",
+            "col": 7,
+            "row": 42,
+            "reward_name": "ALL 강화권(S)",
+            "reward_type": "강화권",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "I42",
+              "col": 9,
+              "value": "30",
+              "quantity": {
+                "value": 30,
+                "unit": "",
+                "raw": "30",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G43",
+            "col": 7,
+            "row": 43,
+            "reward_name": "고급 선수카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G44",
+            "col": 7,
+            "row": 44,
+            "reward_name": "골드",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "I44",
+              "col": 9,
+              "value": "200000",
+              "quantity": {
+                "value": 200000,
+                "unit": "",
+                "raw": "200000",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G45",
+            "col": 7,
+            "row": 45,
+            "reward_name": "15-26 리그 선택 다이아 확정 팩",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G46",
+            "col": 7,
+            "row": 46,
+            "reward_name": "스태미나",
+            "reward_type": "기타",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "I46",
+              "col": 9,
+              "value": "300",
+              "quantity": {
+                "value": 300,
+                "unit": "",
+                "raw": "300",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G47",
+            "col": 7,
+            "row": 47,
+            "reward_name": "컨셉카드 선수팩 티켓",
+            "reward_type": "팩 티켓",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "I47",
+              "col": 9,
+              "value": "10",
+              "quantity": {
+                "value": 10,
+                "unit": "",
+                "raw": "10",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G48",
+            "col": 7,
+            "row": 48,
+            "reward_name": "스태미나",
+            "reward_type": "기타",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "I48",
+              "col": 9,
+              "value": "300",
+              "quantity": {
+                "value": 300,
+                "unit": "",
+                "raw": "300",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G49",
+            "col": 7,
+            "row": 49,
+            "reward_name": "PP",
+            "reward_type": "PP",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "I49",
+              "col": 9,
+              "value": "10000",
+              "quantity": {
+                "value": 10000,
+                "unit": "",
+                "raw": "10000",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G50",
+            "col": 7,
+            "row": 50,
+            "reward_name": "고급 선수카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G51",
+            "col": 7,
+            "row": 51,
+            "reward_name": "스태미나",
+            "reward_type": "기타",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "I51",
+              "col": 9,
+              "value": "200",
+              "quantity": {
+                "value": 200,
+                "unit": "",
+                "raw": "200",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G52",
+            "col": 7,
+            "row": 52,
+            "reward_name": "골드",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "I52",
+              "col": 9,
+              "value": "50000",
+              "quantity": {
+                "value": 50000,
+                "unit": "",
+                "raw": "50000",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          }
+        ]
+      },
+      {
+        "title": "2. 룰렛 이벤트",
+        "event_type": "룰렛_이벤트",
+        "title_cell": "B56",
+        "start_row": 56,
+        "end_row": 85,
+        "reward_count": 8,
+        "reward_rows": [
+          {
+            "cell": "C76",
+            "col": 3,
+            "row": 76,
+            "reward_name": "15-26 구단 지정 프리즘 다이아 10% 팩 (리그 선택)",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C77",
+            "col": 3,
+            "row": 77,
+            "reward_name": "최상급 선수카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C78",
+            "col": 3,
+            "row": 78,
+            "reward_name": "고급 선수카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "E78",
+              "col": 5,
+              "value": "20",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C79",
+            "col": 3,
+            "row": 79,
+            "reward_name": "PP",
+            "reward_type": "PP",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "E79",
+              "col": 5,
+              "value": "30000",
+              "quantity": {
+                "value": 30000,
+                "unit": "",
+                "raw": "30000",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C80",
+            "col": 3,
+            "row": 80,
+            "reward_name": "일반 선수카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "E80",
+              "col": 5,
+              "value": "30",
+              "quantity": {
+                "value": 30,
+                "unit": "",
+                "raw": "30",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C81",
+            "col": 3,
+            "row": 81,
+            "reward_name": "행동력",
+            "reward_type": "행동력",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "E81",
+              "col": 5,
+              "value": "300",
+              "quantity": {
+                "value": 300,
+                "unit": "",
+                "raw": "300",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C82",
+            "col": 3,
+            "row": 82,
+            "reward_name": "골드",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "E82",
+              "col": 5,
+              "value": "100000",
+              "quantity": {
+                "value": 100000,
+                "unit": "",
+                "raw": "100000",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C83",
+            "col": 3,
+            "row": 83,
+            "reward_name": "XP",
+            "reward_type": "XP",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "E83",
+              "col": 5,
+              "value": "20000",
+              "quantity": {
+                "value": 20000,
+                "unit": "",
+                "raw": "20000",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          }
+        ]
+      },
+      {
+        "title": "3. 빙고 이벤트",
+        "event_type": "빙고_이벤트",
+        "title_cell": "B86",
+        "start_row": 86,
+        "end_row": 137,
+        "reward_count": 34,
+        "reward_rows": [
+          {
+            "cell": "E104",
+            "col": 5,
+            "row": 104,
+            "reward_name": "진 선수 특별 다이아 팩",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E105",
+            "col": 5,
+            "row": 105,
+            "reward_name": "골드",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F105",
+              "col": 6,
+              "value": "500000",
+              "quantity": {
+                "value": 500000,
+                "unit": "",
+                "raw": "500000",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E106",
+            "col": 5,
+            "row": 106,
+            "reward_name": "다이아",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F106",
+              "col": 6,
+              "value": "500",
+              "quantity": {
+                "value": 500,
+                "unit": "",
+                "raw": "500",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E107",
+            "col": 5,
+            "row": 107,
+            "reward_name": "다이아 스페셜 훈련권",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E108",
+            "col": 5,
+            "row": 108,
+            "reward_name": "ALL 강화권(S)",
+            "reward_type": "강화권",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F108",
+              "col": 6,
+              "value": "20",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E109",
+            "col": 5,
+            "row": 109,
+            "reward_name": "다이아 트레잇 변경권",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E110",
+            "col": 5,
+            "row": 110,
+            "reward_name": "진 선수 특별 다이아 팩",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F110",
+              "col": 6,
+              "value": "10",
+              "quantity": {
+                "value": 10,
+                "unit": "",
+                "raw": "10",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E111",
+            "col": 5,
+            "row": 111,
+            "reward_name": "진 선수 특별 다이아 팩",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F111",
+              "col": 6,
+              "value": "20",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E112",
+            "col": 5,
+            "row": 112,
+            "reward_name": "진 선수 특별 다이아 팩",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F112",
+              "col": 6,
+              "value": "30",
+              "quantity": {
+                "value": 30,
+                "unit": "",
+                "raw": "30",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E113",
+            "col": 5,
+            "row": 113,
+            "reward_name": "ALL 강화권(A)",
+            "reward_type": "강화권",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F113",
+              "col": 6,
+              "value": "20",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E114",
+            "col": 5,
+            "row": 114,
+            "reward_name": "ALL 강화권(B)",
+            "reward_type": "강화권",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F114",
+              "col": 6,
+              "value": "20",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E115",
+            "col": 5,
+            "row": 115,
+            "reward_name": "빅딜 도전권",
+            "reward_type": "기타",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E116",
+            "col": 5,
+            "row": 116,
+            "reward_name": "다이아 스페셜 훈련권",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E117",
+            "col": 5,
+            "row": 117,
+            "reward_name": "다이아 스페셜 훈련권",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E118",
+            "col": 5,
+            "row": 118,
+            "reward_name": "다이아 스페셜 훈련권",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E119",
+            "col": 5,
+            "row": 119,
+            "reward_name": "다이아",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F119",
+              "col": 6,
+              "value": "100",
+              "quantity": {
+                "value": 100,
+                "unit": "",
+                "raw": "100",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E120",
+            "col": 5,
+            "row": 120,
+            "reward_name": "다이아",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F120",
+              "col": 6,
+              "value": "200",
+              "quantity": {
+                "value": 200,
+                "unit": "",
+                "raw": "200",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E121",
+            "col": 5,
+            "row": 121,
+            "reward_name": "다이아",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F121",
+              "col": 6,
+              "value": "300",
+              "quantity": {
+                "value": 300,
+                "unit": "",
+                "raw": "300",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E122",
+            "col": 5,
+            "row": 122,
+            "reward_name": "골드",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F122",
+              "col": 6,
+              "value": "10000",
+              "quantity": {
+                "value": 10000,
+                "unit": "",
+                "raw": "10000",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E123",
+            "col": 5,
+            "row": 123,
+            "reward_name": "골드",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F123",
+              "col": 6,
+              "value": "20000",
+              "quantity": {
+                "value": 20000,
+                "unit": "",
+                "raw": "20000",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E124",
+            "col": 5,
+            "row": 124,
+            "reward_name": "골드",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F124",
+              "col": 6,
+              "value": "30000",
+              "quantity": {
+                "value": 30000,
+                "unit": "",
+                "raw": "30000",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E125",
+            "col": 5,
+            "row": 125,
+            "reward_name": "XP",
+            "reward_type": "XP",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F125",
+              "col": 6,
+              "value": "2000",
+              "quantity": {
+                "value": 2000,
+                "unit": "",
+                "raw": "2000",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E126",
+            "col": 5,
+            "row": 126,
+            "reward_name": "XP",
+            "reward_type": "XP",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F126",
+              "col": 6,
+              "value": "3000",
+              "quantity": {
+                "value": 3000,
+                "unit": "",
+                "raw": "3000",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E127",
+            "col": 5,
+            "row": 127,
+            "reward_name": "PP",
+            "reward_type": "PP",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F127",
+              "col": 6,
+              "value": "1000",
+              "quantity": {
+                "value": 1000,
+                "unit": "",
+                "raw": "1000",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E128",
+            "col": 5,
+            "row": 128,
+            "reward_name": "PP",
+            "reward_type": "PP",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F128",
+              "col": 6,
+              "value": "2000",
+              "quantity": {
+                "value": 2000,
+                "unit": "",
+                "raw": "2000",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E129",
+            "col": 5,
+            "row": 129,
+            "reward_name": "골드 트레잇 변경권",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E130",
+            "col": 5,
+            "row": 130,
+            "reward_name": "골드 트레잇 변경권",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E131",
+            "col": 5,
+            "row": 131,
+            "reward_name": "다이아 트레잇 변경권",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E132",
+            "col": 5,
+            "row": 132,
+            "reward_name": "고급 선수 카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E133",
+            "col": 5,
+            "row": 133,
+            "reward_name": "고급 선수 카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E134",
+            "col": 5,
+            "row": 134,
+            "reward_name": "고급 선수 카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E135",
+            "col": 5,
+            "row": 135,
+            "reward_name": "일반 선수 카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F135",
+              "col": 6,
+              "value": "10",
+              "quantity": {
+                "value": 10,
+                "unit": "",
+                "raw": "10",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E136",
+            "col": 5,
+            "row": 136,
+            "reward_name": "일반 선수 카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F136",
+              "col": 6,
+              "value": "20",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E137",
+            "col": 5,
+            "row": 137,
+            "reward_name": "일반 선수 카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F137",
+              "col": 6,
+              "value": "30",
+              "quantity": {
+                "value": 30,
+                "unit": "",
+                "raw": "30",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          }
+        ]
+      }
+    ],
+    "260715": [
+      {
+        "title": "06.18_ Event",
+        "event_type": "기타",
+        "title_cell": "B3",
+        "start_row": 3,
+        "end_row": 5,
+        "reward_count": 0,
+        "reward_rows": []
+      },
+      {
+        "title": "1. 포인트 레이스 이벤트",
+        "event_type": "포인트레이스_이벤트",
+        "title_cell": "B6",
+        "start_row": 6,
+        "end_row": 55,
+        "reward_count": 22,
+        "reward_rows": [
+          {
+            "cell": "C28",
+            "col": 3,
+            "row": 28,
+            "reward_name": "골드",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "D28",
+              "col": 4,
+              "value": "100000",
+              "quantity": {
+                "value": 100000,
+                "unit": "",
+                "raw": "100000",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C29",
+            "col": 3,
+            "row": 29,
+            "reward_name": "골드 트레잇 획득권",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C30",
+            "col": 3,
+            "row": 30,
+            "reward_name": "골드 트레잇 변경권",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C31",
+            "col": 3,
+            "row": 31,
+            "reward_name": "다이아",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "D31",
+              "col": 4,
+              "value": "500",
+              "quantity": {
+                "value": 500,
+                "unit": "",
+                "raw": "500",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C32",
+            "col": 3,
+            "row": 32,
+            "reward_name": "PP",
+            "reward_type": "PP",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "D32",
+              "col": 4,
+              "value": "30000",
+              "quantity": {
+                "value": 30000,
+                "unit": "",
+                "raw": "30000",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C33",
+            "col": 3,
+            "row": 33,
+            "reward_name": "다이아 스페셜 훈련권",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C34",
+            "col": 3,
+            "row": 34,
+            "reward_name": "고급 선수 카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "D34",
+              "col": 4,
+              "value": "20",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C37",
+            "col": 3,
+            "row": 37,
+            "reward_name": "∎ 이벤트 보상",
+            "reward_type": "기타",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G39",
+            "col": 7,
+            "row": 39,
+            "reward_name": "골드",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "I39",
+              "col": 9,
+              "value": "300000",
+              "quantity": {
+                "value": 300000,
+                "unit": "",
+                "raw": "300000",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G40",
+            "col": 7,
+            "row": 40,
+            "reward_name": "다이아 스페셜 훈련권",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G41",
+            "col": 7,
+            "row": 41,
+            "reward_name": "고급 선수카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "I41",
+              "col": 9,
+              "value": "10",
+              "quantity": {
+                "value": 10,
+                "unit": "",
+                "raw": "10",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G42",
+            "col": 7,
+            "row": 42,
+            "reward_name": "ALL 강화권(S)",
+            "reward_type": "강화권",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "I42",
+              "col": 9,
+              "value": "30",
+              "quantity": {
+                "value": 30,
+                "unit": "",
+                "raw": "30",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G43",
+            "col": 7,
+            "row": 43,
+            "reward_name": "고급 선수카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G44",
+            "col": 7,
+            "row": 44,
+            "reward_name": "골드",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "I44",
+              "col": 9,
+              "value": "200000",
+              "quantity": {
+                "value": 200000,
+                "unit": "",
+                "raw": "200000",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G45",
+            "col": 7,
+            "row": 45,
+            "reward_name": "15-26 리그 선택 다이아 확정 팩",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G46",
+            "col": 7,
+            "row": 46,
+            "reward_name": "스태미나",
+            "reward_type": "기타",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "I46",
+              "col": 9,
+              "value": "300",
+              "quantity": {
+                "value": 300,
+                "unit": "",
+                "raw": "300",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G47",
+            "col": 7,
+            "row": 47,
+            "reward_name": "컨셉카드 선수팩 티켓",
+            "reward_type": "팩 티켓",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "I47",
+              "col": 9,
+              "value": "10",
+              "quantity": {
+                "value": 10,
+                "unit": "",
+                "raw": "10",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G48",
+            "col": 7,
+            "row": 48,
+            "reward_name": "스태미나",
+            "reward_type": "기타",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "I48",
+              "col": 9,
+              "value": "300",
+              "quantity": {
+                "value": 300,
+                "unit": "",
+                "raw": "300",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G49",
+            "col": 7,
+            "row": 49,
+            "reward_name": "PP",
+            "reward_type": "PP",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "I49",
+              "col": 9,
+              "value": "10000",
+              "quantity": {
+                "value": 10000,
+                "unit": "",
+                "raw": "10000",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G50",
+            "col": 7,
+            "row": 50,
+            "reward_name": "고급 선수카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G51",
+            "col": 7,
+            "row": 51,
+            "reward_name": "스태미나",
+            "reward_type": "기타",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "I51",
+              "col": 9,
+              "value": "200",
+              "quantity": {
+                "value": 200,
+                "unit": "",
+                "raw": "200",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "G52",
+            "col": 7,
+            "row": 52,
+            "reward_name": "골드",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "I52",
+              "col": 9,
+              "value": "50000",
+              "quantity": {
+                "value": 50000,
+                "unit": "",
+                "raw": "50000",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          }
+        ]
+      },
+      {
+        "title": "2. 룰렛 이벤트",
+        "event_type": "룰렛_이벤트",
+        "title_cell": "B56",
+        "start_row": 56,
+        "end_row": 85,
+        "reward_count": 8,
+        "reward_rows": [
+          {
+            "cell": "C76",
+            "col": 3,
+            "row": 76,
+            "reward_name": "15-26 구단 지정 프리즘 다이아 10% 팩 (리그 선택)",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C77",
+            "col": 3,
+            "row": 77,
+            "reward_name": "최상급 선수카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C78",
+            "col": 3,
+            "row": 78,
+            "reward_name": "고급 선수카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "E78",
+              "col": 5,
+              "value": "20",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C79",
+            "col": 3,
+            "row": 79,
+            "reward_name": "PP",
+            "reward_type": "PP",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "E79",
+              "col": 5,
+              "value": "30000",
+              "quantity": {
+                "value": 30000,
+                "unit": "",
+                "raw": "30000",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C80",
+            "col": 3,
+            "row": 80,
+            "reward_name": "일반 선수카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "E80",
+              "col": 5,
+              "value": "30",
+              "quantity": {
+                "value": 30,
+                "unit": "",
+                "raw": "30",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C81",
+            "col": 3,
+            "row": 81,
+            "reward_name": "행동력",
+            "reward_type": "행동력",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "E81",
+              "col": 5,
+              "value": "300",
+              "quantity": {
+                "value": 300,
+                "unit": "",
+                "raw": "300",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C82",
+            "col": 3,
+            "row": 82,
+            "reward_name": "골드",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "E82",
+              "col": 5,
+              "value": "100000",
+              "quantity": {
+                "value": 100000,
+                "unit": "",
+                "raw": "100000",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "C83",
+            "col": 3,
+            "row": 83,
+            "reward_name": "XP",
+            "reward_type": "XP",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "E83",
+              "col": 5,
+              "value": "20000",
+              "quantity": {
+                "value": 20000,
+                "unit": "",
+                "raw": "20000",
+                "confidence": "high"
+              },
+              "col_distance": 2
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          }
+        ]
+      },
+      {
+        "title": "3. 빙고 이벤트",
+        "event_type": "빙고_이벤트",
+        "title_cell": "B86",
+        "start_row": 86,
+        "end_row": 137,
+        "reward_count": 34,
+        "reward_rows": [
+          {
+            "cell": "E104",
+            "col": 5,
+            "row": 104,
+            "reward_name": "진 선수 특별 다이아 팩",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E105",
+            "col": 5,
+            "row": 105,
+            "reward_name": "골드",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F105",
+              "col": 6,
+              "value": "500000",
+              "quantity": {
+                "value": 500000,
+                "unit": "",
+                "raw": "500000",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E106",
+            "col": 5,
+            "row": 106,
+            "reward_name": "다이아",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F106",
+              "col": 6,
+              "value": "500",
+              "quantity": {
+                "value": 500,
+                "unit": "",
+                "raw": "500",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E107",
+            "col": 5,
+            "row": 107,
+            "reward_name": "다이아 스페셜 훈련권",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E108",
+            "col": 5,
+            "row": 108,
+            "reward_name": "ALL 강화권(S)",
+            "reward_type": "강화권",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F108",
+              "col": 6,
+              "value": "20",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E109",
+            "col": 5,
+            "row": 109,
+            "reward_name": "다이아 트레잇 변경권",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E110",
+            "col": 5,
+            "row": 110,
+            "reward_name": "진 선수 특별 다이아 팩",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F110",
+              "col": 6,
+              "value": "10",
+              "quantity": {
+                "value": 10,
+                "unit": "",
+                "raw": "10",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E111",
+            "col": 5,
+            "row": 111,
+            "reward_name": "진 선수 특별 다이아 팩",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F111",
+              "col": 6,
+              "value": "20",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E112",
+            "col": 5,
+            "row": 112,
+            "reward_name": "진 선수 특별 다이아 팩",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F112",
+              "col": 6,
+              "value": "30",
+              "quantity": {
+                "value": 30,
+                "unit": "",
+                "raw": "30",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E113",
+            "col": 5,
+            "row": 113,
+            "reward_name": "ALL 강화권(A)",
+            "reward_type": "강화권",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F113",
+              "col": 6,
+              "value": "20",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E114",
+            "col": 5,
+            "row": 114,
+            "reward_name": "ALL 강화권(B)",
+            "reward_type": "강화권",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F114",
+              "col": 6,
+              "value": "20",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E115",
+            "col": 5,
+            "row": 115,
+            "reward_name": "빅딜 도전권",
+            "reward_type": "기타",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E116",
+            "col": 5,
+            "row": 116,
+            "reward_name": "다이아 스페셜 훈련권",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E117",
+            "col": 5,
+            "row": 117,
+            "reward_name": "다이아 스페셜 훈련권",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E118",
+            "col": 5,
+            "row": 118,
+            "reward_name": "다이아 스페셜 훈련권",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E119",
+            "col": 5,
+            "row": 119,
+            "reward_name": "다이아",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F119",
+              "col": 6,
+              "value": "100",
+              "quantity": {
+                "value": 100,
+                "unit": "",
+                "raw": "100",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E120",
+            "col": 5,
+            "row": 120,
+            "reward_name": "다이아",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F120",
+              "col": 6,
+              "value": "200",
+              "quantity": {
+                "value": 200,
+                "unit": "",
+                "raw": "200",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E121",
+            "col": 5,
+            "row": 121,
+            "reward_name": "다이아",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F121",
+              "col": 6,
+              "value": "300",
+              "quantity": {
+                "value": 300,
+                "unit": "",
+                "raw": "300",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E122",
+            "col": 5,
+            "row": 122,
+            "reward_name": "골드",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F122",
+              "col": 6,
+              "value": "10000",
+              "quantity": {
+                "value": 10000,
+                "unit": "",
+                "raw": "10000",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E123",
+            "col": 5,
+            "row": 123,
+            "reward_name": "골드",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F123",
+              "col": 6,
+              "value": "20000",
+              "quantity": {
+                "value": 20000,
+                "unit": "",
+                "raw": "20000",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E124",
+            "col": 5,
+            "row": 124,
+            "reward_name": "골드",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F124",
+              "col": 6,
+              "value": "30000",
+              "quantity": {
+                "value": 30000,
+                "unit": "",
+                "raw": "30000",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E125",
+            "col": 5,
+            "row": 125,
+            "reward_name": "XP",
+            "reward_type": "XP",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F125",
+              "col": 6,
+              "value": "2000",
+              "quantity": {
+                "value": 2000,
+                "unit": "",
+                "raw": "2000",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E126",
+            "col": 5,
+            "row": 126,
+            "reward_name": "XP",
+            "reward_type": "XP",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F126",
+              "col": 6,
+              "value": "3000",
+              "quantity": {
+                "value": 3000,
+                "unit": "",
+                "raw": "3000",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E127",
+            "col": 5,
+            "row": 127,
+            "reward_name": "PP",
+            "reward_type": "PP",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F127",
+              "col": 6,
+              "value": "1000",
+              "quantity": {
+                "value": 1000,
+                "unit": "",
+                "raw": "1000",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E128",
+            "col": 5,
+            "row": 128,
+            "reward_name": "PP",
+            "reward_type": "PP",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F128",
+              "col": 6,
+              "value": "2000",
+              "quantity": {
+                "value": 2000,
+                "unit": "",
+                "raw": "2000",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E129",
+            "col": 5,
+            "row": 129,
+            "reward_name": "골드 트레잇 변경권",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E130",
+            "col": 5,
+            "row": 130,
+            "reward_name": "골드 트레잇 변경권",
+            "reward_type": "골드",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E131",
+            "col": 5,
+            "row": 131,
+            "reward_name": "다이아 트레잇 변경권",
+            "reward_type": "다이아",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E132",
+            "col": 5,
+            "row": 132,
+            "reward_name": "고급 선수 카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E133",
+            "col": 5,
+            "row": 133,
+            "reward_name": "고급 선수 카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E134",
+            "col": 5,
+            "row": 134,
+            "reward_name": "고급 선수 카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": null,
+            "has_quantity": false,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E135",
+            "col": 5,
+            "row": 135,
+            "reward_name": "일반 선수 카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F135",
+              "col": 6,
+              "value": "10",
+              "quantity": {
+                "value": 10,
+                "unit": "",
+                "raw": "10",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E136",
+            "col": 5,
+            "row": 136,
+            "reward_name": "일반 선수 카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F136",
+              "col": 6,
+              "value": "20",
+              "quantity": {
+                "value": 20,
+                "unit": "",
+                "raw": "20",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          },
+          {
+            "cell": "E137",
+            "col": 5,
+            "row": 137,
+            "reward_name": "일반 선수 카드 팩 티켓",
+            "reward_type": "선수 카드",
+            "quantity_in_cell": null,
+            "nearest_quantity": {
+              "cell": "F137",
+              "col": 6,
+              "value": "30",
+              "quantity": {
+                "value": 30,
+                "unit": "",
+                "raw": "30",
+                "confidence": "high"
+              },
+              "col_distance": 1
+            },
+            "has_quantity": true,
+            "scan_mode": "header"
+          }
+        ]
+      }
+    ]
+  }
+}

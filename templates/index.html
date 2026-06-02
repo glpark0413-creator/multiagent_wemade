@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>멀티 에이전트 PM</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<!-- ── 사이드바 ──────────────────────────────────────────────────────────── -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <span class="logo-icon">🤖</span>
+    <span class="logo-text">멀티 에이전트 PM</span>
+  </div>
+  <nav class="sidebar-nav">
+    <button class="nav-btn active" data-page="home">🏠 PM 홈</button>
+    <button class="nav-btn" data-page="event">📅 이벤트 기획</button>
+    <button class="nav-btn" data-page="localizer">🌐 현지화 번역</button>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="agent-badge">event-planner</div>
+    <div class="agent-badge">game-localizer</div>
+    <div id="ai-mode-badge" class="agent-badge" style="margin-top:6px;background:#2d2d40;color:#a6e3a1">
+      AI: 확인 중...
+    </div>
+  </div>
+</aside>
+
+<!-- ── 메인 콘텐츠 ────────────────────────────────────────────────────────── -->
+<main class="main">
+
+  <!-- 토스트 알림 -->
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- ════ PM 홈 (채팅 인터페이스) ════ -->
+  <section id="page-home" class="page active">
+    <div class="page-header" style="margin-bottom:12px">
+      <h1>🤖 멀티 에이전트 PM</h1>
+      <p class="subtitle">자연어로 요청하면 PM이 분석 후 에이전트를 자동 실행합니다.</p>
+    </div>
+
+    <!-- AI 미설정 경고 -->
+    <div id="pm-no-ai-banner" class="alert alert-warning hidden">
+      ⚠️ <strong>ANTHROPIC_API_KEY</strong>가 설정되지 않았습니다.
+      환경변수를 설정하거나 좌측 메뉴에서 에이전트를 직접 선택하세요.
+    </div>
+
+    <!-- 채팅 영역 -->
+    <div class="chat-container">
+      <!-- 에이전트 연결 배지 (기본 숨김) -->
+      <div class="chat-header-bar">
+        <span class="chat-header-title">💬 PM 채팅</span>
+        <span id="chat-agent-badge" class="chat-agent-badge hidden"></span>
+      </div>
+
+      <div id="chat-messages" class="chat-messages">
+        <!-- 초기 PM 메시지 -->
+        <div class="chat-bubble pm">
+          <div class="chat-avatar">PM</div>
+          <div class="chat-body">
+            <p>안녕하세요! 멀티 에이전트 PM입니다.</p>
+            <p style="margin-top:8px">요청을 입력하면 PM이 의도를 파악해 <strong>전문 에이전트에게 위임</strong>합니다.<br>에이전트가 직접 장르·키워드·참조 탭 등을 단계적으로 여쭤봅니다.</p>
+            <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:6px">
+              <span class="example-chip" onclick="pmSetExample(this)">📅 7월 일본 이벤트 기획안 만들어줘</span>
+              <span class="example-chip" onclick="pmSetExample(this)">🌐 용어집 로드해줘</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chat-input-row">
+        <textarea id="pm-input" class="chat-input" rows="2"
+          placeholder="예: 7월 일본 마켓 이벤트 기획안 만들어줘. 소스: C:/Users/.../이벤트.xlsx, 탭: 260701, 260715"
+          onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();pmSend()}"
+        ></textarea>
+        <button class="btn btn-primary chat-send-btn" id="pm-send-btn" onclick="pmSend()">전송</button>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ════ 이벤트 기획 ════ -->
+  <section id="page-event" class="page">
+    <div class="page-header">
+      <h1>📅 이벤트 기획 에이전트</h1>
+      <p class="subtitle">기존 xlsx / Google Sheets를 분석해 신규 이벤트 기획안을 자동 생성합니다.</p>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="ep-create">① 탭 생성</button>
+      <button class="tab-btn" data-tab="ep-rewards">② 보상 추천</button>
+      <button class="tab-btn" data-tab="ep-patterns">③ 패턴 갭 분석</button>
+      <button class="tab-btn" data-tab="ep-output">④ 최종 출력</button>
+    </div>
+
+    <!-- ① 탭 생성 -->
+    <div id="ep-create" class="tab-panel active">
+      <div class="card">
+        <h3>소스 파일 및 기본 설정</h3>
+        <div class="form-row">
+          <div class="form-group flex-2">
+            <label>소스 xlsx 경로 <span class="required">*</span></label>
+            <div style="display:flex;gap:8px">
+              <input type="text" id="ep-source" placeholder="예: C:/Users/.../이벤트.xlsx" style="flex:1">
+              <button class="btn btn-secondary" onclick="epLoadTabs()" id="btn-load-tabs">📋 탭 목록 불러오기</button>
+            </div>
+          </div>
+          <div class="form-group flex-1">
+            <label>출력 파일명</label>
+            <input type="text" id="ep-output-name" value="이벤트기획_신규탭.xlsx">
+          </div>
+        </div>
+      </div>
+
+      <!-- 탭 목록 + 참조 탭 선택기 -->
+      <div class="card" id="card-tab-selector" style="display:none">
+        <h3>📋 탭 설정 <small style="font-weight:400;color:#6b7280">— 소스 파일의 기존 탭 목록에서 참조 탭을 직접 선택하세요</small></h3>
+
+        <!-- 신규 탭 추가 -->
+        <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:14px">
+          <div class="form-group" style="flex:1;margin-bottom:0">
+            <label>추가할 탭명 <small>(YYMMDD)</small></label>
+            <input type="text" id="ep-new-tab-input" placeholder="예: 260709" maxlength="6"
+              onkeydown="if(event.key==='Enter')epAddTabRow()">
+          </div>
+          <button class="btn btn-primary" onclick="epAddTabRow()" style="white-space:nowrap">+ 탭 추가</button>
+        </div>
+
+        <!-- 탭 행 목록 -->
+        <div id="ep-tab-rows" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
+          <div style="color:#a0aec0;font-size:13px;padding:12px;text-align:center;border:1px dashed #e2e8f0;border-radius:8px">
+            위에서 생성할 탭명을 입력하고 추가하세요
+          </div>
+        </div>
+
+        <!-- 기존 탭 목록 참고 -->
+        <details style="margin-top:8px">
+          <summary style="font-size:12px;color:#6b7280;cursor:pointer;user-select:none">
+            📅 소스 파일의 전체 탭 목록 보기
+          </summary>
+          <div id="ep-all-tabs-list" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;padding:10px;background:#f8f9fb;border-radius:8px"></div>
+        </details>
+      </div>
+
+      <!-- 기존 탭 입력 폼 (탭 불러오기 전) -->
+      <div class="card" id="card-tab-manual" style="display:none">
+        <h3>생성할 탭 설정 <small style="font-weight:400;color:#6b7280">(수동 입력)</small></h3>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>생성할 탭명 <span class="required">*</span><small> (줄바꿈 구분, YYMMDD)</small></label>
+            <textarea id="ep-new-tabs" rows="4" placeholder="260625&#10;260702&#10;260709"></textarea>
+          </div>
+          <div class="form-group flex-1">
+            <label>참조 탭명 <small>(생성 탭과 동일 순서)</small></label>
+            <textarea id="ep-ref-tabs" rows="4" placeholder="260611&#10;260618&#10;260618"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>장르 및 키워드 설정</h3>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>장르 계열</label>
+            <select id="ep-genre-family" onchange="updateGenreDetail()">
+              <option value="액션·슈팅">액션·슈팅</option>
+              <option value="RPG·전략">RPG·전략</option>
+              <option value="캐주얼">캐주얼</option>
+              <option value="스포츠" selected>스포츠</option>
+            </select>
+          </div>
+          <div class="form-group flex-1">
+            <label>세부 장르</label>
+            <select id="ep-genre-detail"></select>
+          </div>
+          <div class="form-group flex-1">
+            <label>타겟 마켓</label>
+            <select id="ep-market">
+              <option value="글로벌">글로벌</option>
+              <option value="일본">일본</option>
+              <option value="한국">한국</option>
+              <option value="북미">북미</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>이벤트 키워드 <small>(쉼표 구분 — 비워두면 기본값)</small></label>
+          <input type="text" id="ep-keywords" placeholder="예: 전반기, 올스타, 홈런, 만루, 끝내기">
+        </div>
+        <div class="form-group">
+          <label>업데이트 내용 <small>(선택)</small></label>
+          <textarea id="ep-update-notes" rows="2" placeholder="예: 이번 달 보상에 '여름 선물 팩' 추가"></textarea>
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-lg" onclick="epCreateTabs()">🚀 탭 생성 실행</button>
+      <div id="ep-create-log" class="log-box hidden"></div>
+    </div>
+
+    <!-- ② 보상 추천 -->
+    <div id="ep-rewards" class="tab-panel">
+      <div class="card">
+        <h3>파일 경로</h3>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>소스 xlsx</label>
+            <input type="text" id="rw-source" placeholder="소스 xlsx 경로">
+          </div>
+          <div class="form-group flex-1">
+            <label>output xlsx</label>
+            <input type="text" id="rw-output" placeholder="생성된 output xlsx 경로">
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="epScanRewards('source')">① 소스 탭 보상 스캔</button>
+          <button class="btn btn-secondary" onclick="epScanRewards('new')">② 신규 탭 보상 스캔</button>
+          <button class="btn btn-primary" onclick="epRecommendRewards()">③ 보상 추천 + 리뷰 큐 준비</button>
+        </div>
+        <div id="rw-stats" class="stats-row hidden">
+          <div class="stat-item"><span class="stat-label">총 섹션</span><span id="rw-total" class="stat-val">—</span></div>
+          <div class="stat-item"><span class="stat-label">변경 권장</span><span id="rw-changes" class="stat-val">—</span></div>
+        </div>
+        <div id="rw-log" class="log-box hidden"></div>
+      </div>
+
+      <div class="card">
+        <h3>보상 변경 직접 적용</h3>
+        <p class="hint">Claude Code 에이전트가 순차 리뷰 후 승인된 변경 내용을 JSON으로 입력하세요.</p>
+        <div class="form-group">
+          <label>변경 내용 JSON</label>
+          <textarea id="rw-changes-json" rows="5" placeholder='[{"qty_cell":"AS12","new_qty":50},{"item_cell":"AR20","new_name":"26-27 리그 선택 다이아 확정 팩"}]'></textarea>
+        </div>
+        <button class="btn btn-warning" onclick="epApplyRewards()">변경 적용</button>
+        <div id="rw-apply-log" class="log-box hidden"></div>
+      </div>
+    </div>
+
+    <!-- ③ 패턴 갭 분석 -->
+    <div id="ep-patterns" class="tab-panel">
+      <div class="card">
+        <h3>이벤트 패턴 갭 분석</h3>
+        <p class="hint">소스 xlsx의 역사적 이벤트 구성 패턴 대비 신규 탭에서 누락된 이벤트 유형을 분석합니다.</p>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>소스 xlsx</label>
+            <input type="text" id="pt-source" placeholder="소스 xlsx 경로">
+          </div>
+          <div class="form-group flex-1">
+            <label>output xlsx</label>
+            <input type="text" id="pt-output" placeholder="생성된 output xlsx 경로">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>분석할 탭명 <small>(쉼표 구분)</small></label>
+          <input type="text" id="pt-tabs" placeholder="예: 260625,260702">
+        </div>
+        <button class="btn btn-primary" onclick="epAnalyzePatterns()">🔍 갭 분석 실행</button>
+        <div id="pt-log" class="log-box hidden"></div>
+      </div>
+      <div id="pt-result" class="hidden"></div>
+    </div>
+
+    <!-- ④ 최종 출력 -->
+    <div id="ep-output" class="tab-panel">
+      <div class="card">
+        <h3>Google Sheets 업로드</h3>
+        <div class="form-row">
+          <div class="form-group flex-2">
+            <label>업로드할 xlsx 경로</label>
+            <input type="text" id="out-path" placeholder="output xlsx 경로">
+          </div>
+          <div class="form-group flex-2">
+            <label>대상 Google Sheets URL <small>(비워두면 신규 생성)</small></label>
+            <input type="text" id="out-gsheet-url" placeholder="https://docs.google.com/spreadsheets/d/...">
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="epUploadGsheets()">☁️ Google Sheets 업로드</button>
+        <div id="out-log" class="log-box hidden"></div>
+      </div>
+
+      <div class="card">
+        <h3>로컬 파일 다운로드</h3>
+        <div id="ep-file-list" class="file-list">로딩 중...</div>
+        <button class="btn btn-secondary mt-8" onclick="loadEpFiles()">🔄 목록 새로고침</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════ 현지화 번역 ════ -->
+  <section id="page-localizer" class="page">
+    <div class="page-header">
+      <h1>🌐 현지화 번역 에이전트</h1>
+      <p class="subtitle">게임 텍스트를 용어집 기반으로 다국어 현지화 번역합니다.</p>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="gl-setup">① 용어집 설정</button>
+      <button class="tab-btn" data-tab="gl-translate">② 번역</button>
+      <button class="tab-btn" data-tab="gl-export">③ Export</button>
+    </div>
+
+    <!-- ① 용어집 설정 -->
+    <div id="gl-setup" class="tab-panel active">
+      <div class="card">
+        <h3>용어집 소스</h3>
+        <div class="form-group">
+          <label>Google Sheets 용어집 URL <span class="badge badge-primary">마스터</span></label>
+          <input type="text" id="gl-gsheet-url" placeholder="https://docs.google.com/spreadsheets/d/...">
+        </div>
+        <div class="form-group">
+          <label>Excel 용어집 경로 <span class="badge badge-secondary">보조</span></label>
+          <input type="text" id="gl-excel-path" placeholder="예: C:/Users/.../glossary.xlsx">
+        </div>
+        <p class="hint">Google Sheets가 마스터입니다. 동일 용어 충돌 시 Google Sheets 값 우선 적용.</p>
+        <button class="btn btn-primary btn-lg" onclick="glLoadGlossary()">📂 용어집 로드</button>
+        <div id="gl-load-log" class="log-box hidden"></div>
+      </div>
+
+      <div id="gl-glossary-status" class="card hidden">
+        <h3>용어집 상태</h3>
+        <div id="gl-stats" class="stats-row"></div>
+        <button class="btn btn-secondary mt-8" onclick="glPreviewGlossary()">용어 미리보기</button>
+        <div id="gl-preview" class="hidden mt-8"></div>
+      </div>
+    </div>
+
+    <!-- ② 번역 -->
+    <div id="gl-translate" class="tab-panel">
+      <div id="gl-no-glossary" class="alert alert-warning hidden">
+        ⚠️ 용어집을 먼저 로드하세요. (① 용어집 설정 탭)
+      </div>
+
+      <div class="card">
+        <h3>번역 입력</h3>
+        <div class="form-group">
+          <label>번역할 원문 <span class="required">*</span></label>
+          <textarea id="gl-source-text" rows="4" placeholder="번역할 게임 텍스트를 입력하세요."></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label>텍스트 유형 힌트</label>
+            <select id="gl-text-type">
+              <option value="">자동 감지</option>
+              <option value="dialogue">대사 (dialogue)</option>
+              <option value="item_desc">아이템설명 (item_desc)</option>
+              <option value="ui">UI (ui)</option>
+              <option value="system_msg">시스템메시지 (system_msg)</option>
+            </select>
+          </div>
+          <div class="form-group flex-2">
+            <label>번역 대상 언어</label>
+            <div class="checkbox-row">
+              <label class="checkbox-label"><input type="checkbox" value="ko" checked> 🇰🇷 한국어</label>
+              <label class="checkbox-label"><input type="checkbox" value="ja" checked> 🇯🇵 일본어</label>
+              <label class="checkbox-label"><input type="checkbox" value="en" checked> 🇺🇸 영어</label>
+              <label class="checkbox-label"><input type="checkbox" value="zh" checked> 🇨🇳 중국어</label>
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="glMatchTerms()">🔍 용어 매칭</button>
+      </div>
+
+      <div id="gl-match-result" class="card hidden">
+        <h3>용어 매칭 결과</h3>
+        <div id="gl-matched-info"></div>
+        <div id="gl-unregistered-warn" class="alert alert-warning hidden"></div>
+      </div>
+
+      <div id="gl-translation-form" class="card hidden">
+        <h3>번역 결과 입력</h3>
+        <p class="hint">Claude Code 에이전트가 번역을 수행한 후 아래에 결과를 입력하세요.</p>
+        <div class="translation-grid">
+          <div class="form-group">
+            <label>🇰🇷 한국어 (ko)</label>
+            <textarea id="tr-ko" rows="3"></textarea>
+          </div>
+          <div class="form-group">
+            <label>🇯🇵 일본어 (ja)</label>
+            <textarea id="tr-ja" rows="3"></textarea>
+          </div>
+          <div class="form-group">
+            <label>🇺🇸 영어 (en)</label>
+            <textarea id="tr-en" rows="3"></textarea>
+          </div>
+          <div class="form-group">
+            <label>🇨🇳 중국어 (zh)</label>
+            <textarea id="tr-zh" rows="3"></textarea>
+          </div>
+        </div>
+        <button class="btn btn-success btn-lg" onclick="glSaveTranslation()">💾 번역 결과 저장 → 버퍼 추가</button>
+        <div id="gl-save-log" class="log-box hidden"></div>
+      </div>
+
+      <div class="card">
+        <h3>세션 버퍼</h3>
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="glLoadBuffer()">📋 버퍼 목록 보기</button>
+          <button class="btn btn-danger" onclick="glClearBuffer()">🗑️ 버퍼 초기화</button>
+        </div>
+        <div id="gl-buffer-list" class="hidden mt-8"></div>
+      </div>
+    </div>
+
+    <!-- ③ Export -->
+    <div id="gl-export" class="tab-panel">
+      <div class="card">
+        <h3>번역 결과 Export</h3>
+        <div class="form-group">
+          <label>Export 포맷</label>
+          <div class="radio-row">
+            <label class="radio-label"><input type="radio" name="export-fmt" value="xlsx" checked> xlsx</label>
+            <label class="radio-label"><input type="radio" name="export-fmt" value="csv"> csv</label>
+            <label class="radio-label"><input type="radio" name="export-fmt" value="both"> 둘 다</label>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-lg" onclick="glExport()">📤 Export 실행</button>
+        <div id="gl-export-log" class="log-box hidden"></div>
+      </div>
+
+      <div class="card">
+        <h3>기존 Export 파일</h3>
+        <div id="gl-file-list" class="file-list">로딩 중...</div>
+        <button class="btn btn-secondary mt-8" onclick="loadGlFiles()">🔄 목록 새로고침</button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
