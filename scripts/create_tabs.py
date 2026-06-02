@@ -51,9 +51,6 @@ FILL_TEXT   = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="s
 # 보상 변경: 연주황 (이전 시트 대비 보상 아이템/수량 차이)
 FILL_REWARD = PatternFill(start_color="FFD966", end_color="FFD966", fill_type="solid")
 
-# 보상 데이터가 위치하는 열 번호 (E=5, F=6, G=7, H=8, I=9)
-REWARD_COLS: frozenset[int] = frozenset({5, 6, 7, 8, 9})
-
 # 시즌·월 키워드: 이 단어가 포함된 셀은 수동 검토 권장
 SEASON_KEYWORDS = [
     "봄의", "여름의", "가을의", "겨울의",
@@ -244,37 +241,79 @@ def snapshot_ws(ws) -> dict:
     }
 
 
+def _find_reward_col_pairs(ws) -> list:
+    """
+    워크시트에서 '보상 아이템' 헤더를 찾고, 같은 행에서 바로 오른쪽에 있는
+    '보상 수량' 헤더와 쌍을 이룬다.
+
+    이벤트마다 보상 열 위치가 다르기 때문에 헤더 텍스트로 동적 탐색.
+
+    예) F12="보상 아이템", H12="보상 수량"
+        E34="보상 아이템", G34="보상 수량"
+        E38="보상 아이템", F38="보상 수량", G38="보상 아이템", I38="보상 수량"
+
+    반환: [(header_row, item_col, qty_col), ...]
+    """
+    # 모든 "보상 아이템" / "보상 수량" 위치 수집
+    item_positions: list[tuple[int, int]] = []
+    qty_positions:  list[tuple[int, int]] = []
+
+    for row in ws.iter_rows():
+        for cell in row:
+            v = cell.value
+            if v == "보상 아이템":
+                item_positions.append((cell.row, cell.column))
+            elif v == "보상 수량":
+                qty_positions.append((cell.row, cell.column))
+
+    # 각 "보상 아이템"에 대해 같은 행에서 오른쪽에 가장 가까운 "보상 수량" 매핑
+    pairs = []
+    for h_row, item_col in item_positions:
+        candidates = [(r, c) for r, c in qty_positions if r == h_row and c > item_col]
+        if candidates:
+            qty_col = min(candidates, key=lambda x: x[1])[1]
+            pairs.append((h_row, item_col, qty_col))
+
+    return pairs
+
+
 def highlight_reward_diffs(ws_new, src_snapshot: dict) -> list:
     """
-    원본 참조 탭 스냅샷과 비교하여 보상 셀(E~I열)이 달라진 경우 연주황 하이라이트.
-    헤더 셀(짧지 않은 문자열)은 제외하고 실제 값(아이템명, 수량, 확률)만 대상으로 함.
+    '보상 아이템' / '보상 수량' 헤더를 기준으로 보상 셀을 동적 탐색하여
+    원본 참조 탭 대비 변경된 셀에 FILL_REWARD (연주황) 하이라이트 적용.
 
-    반환: [(coord, original, new), ...]
+    - 고정 열 번호에 의존하지 않고 헤더 텍스트로 열 위치 파악
+    - 헤더 행 자체는 제외, 그 아래 데이터 행만 대상
+    - 반환: [(coord, original, new), ...]
     """
+    _SKIP_VALUES = {"보상 아이템", "보상 수량", "확률", "획득 보상"}  # 헤더 값 제외
+
+    pairs = _find_reward_col_pairs(ws_new)
+    reward_coords: set[tuple[int, int]] = set()
+
+    for h_row, item_col, qty_col in pairs:
+        for r in range(h_row + 1, ws_new.max_row + 1):
+            iv = ws_new.cell(row=r, column=item_col).value
+            qv = ws_new.cell(row=r, column=qty_col).value
+            if iv is not None and iv not in _SKIP_VALUES:
+                reward_coords.add((r, item_col))
+            if qv is not None and qv not in _SKIP_VALUES:
+                reward_coords.add((r, qty_col))
+
     hits = []
-    for row in ws_new.iter_rows():
-        for cell in row:
-            if cell.column not in REWARD_COLS:
-                continue
-            orig = src_snapshot.get((cell.row, cell.column))
-            new_val = cell.value
-            # 값이 같으면 건너뜀
-            if orig == new_val:
-                continue
-            # 둘 중 하나가 None이면 건너뜀 (빈 셀)
-            if orig is None or new_val is None:
-                continue
-            # datetime은 날짜 변경으로 이미 처리됨
-            if isinstance(new_val, (datetime, date)) or isinstance(orig, (datetime, date)):
-                continue
-            # 헤더 셀 제외: "보상 아이템", "보상 수량", "확률" 등 30자 이상 긴 문자열
-            if isinstance(new_val, str) and len(new_val) > 30:
-                continue
-            if isinstance(orig, str) and len(orig) > 30:
-                continue
-            # 보상 변경 하이라이트 적용
-            cell.fill = FILL_REWARD
-            hits.append((cell.coordinate, orig, new_val))
+    for (r, c) in sorted(reward_coords):
+        cell = ws_new.cell(row=r, column=c)
+        orig    = src_snapshot.get((r, c))
+        new_val = cell.value
+        if orig == new_val:
+            continue
+        if orig is None or new_val is None:
+            continue
+        if isinstance(new_val, (datetime, date)) or isinstance(orig, (datetime, date)):
+            continue
+        cell.fill = FILL_REWARD
+        hits.append((cell.coordinate, orig, new_val))
+
     return hits
 
 
