@@ -44,8 +44,9 @@ from _project_config import load_project_paths
 _paths = load_project_paths()
 
 # ─── 섹션 제목 추출 패턴 ─────────────────────────────────────────────────────
-SECTION_RE     = re.compile(r"^\d+\.")
-TITLE_RE       = re.compile(r"^이벤트\s*제목\s*:\s*(.+)$")
+SECTION_RE       = re.compile(r"^\d+\.")
+TITLE_RE         = re.compile(r"^이벤트\s*제목\s*:\s*(.+)$")
+TAB_HEADER_RE    = re.compile(r"^\d{1,2}[./-]\d{1,2}[._\s]")   # "06.11_ Event" 등 제외
 
 # 월/시즌 키워드 감지 패턴 — 제목에서 교체 대상이 되는 부분
 # 우선순위 순서 (긴 패턴 먼저, 뒤따르는 "의"까지 포함해서 통째로 매치)
@@ -104,6 +105,8 @@ MONTH_SEASON_FALLBACK: dict[int, list[str]] = {
 # ─── 유틸 함수 ────────────────────────────────────────────────────────────────
 
 def parse_section_title(val: str) -> str | None:
+    if TAB_HEADER_RE.match(val):   # "06.11_ Event" 형식 탭 헤더 → 제외
+        return None
     if SECTION_RE.match(val):
         return val
     m = TITLE_RE.match(val)
@@ -199,47 +202,126 @@ def pick_best_season_kw(
     return base
 
 
-def _get_base_pattern(title: str) -> str:
-    """제목에서 시즌 키워드를 제거한 기본 패턴 (변경 여부 비교용)."""
-    result = title
-    for pat in SEASON_PATTERNS:
-        result = pat.sub("", result)
-    return re.sub(r"\s{2,}", " ", result).strip()
+# ─── 이벤트 유형 분류 ────────────────────────────────────────────────────────
+
+# 이벤트 유형 키워드 맵 (유형명 → 감지 키워드 리스트)
+EVENT_TYPE_MAP: dict[str, list[str]] = {
+    "출석이벤트":    ["출석"],
+    "응모권이벤트":  ["응모권"],
+    "미션이벤트":    ["플레이 미션", "미션 이벤트"],
+    "교환소이벤트":  ["교환소"],
+    "오더경쟁이벤트":["오더 경쟁", "오더경쟁"],
+    "PvP이벤트":    ["pvp", "핫타임"],
+    "포인트레이스":  ["포인트 레이스", "포인트레이스"],
+    "룰렛이벤트":    ["룰렛"],
+    "빙고이벤트":    ["빙고"],
+    "쿠폰이벤트":    ["쿠폰"],
+    "야구공찾기":    ["야구공 찾기", "야구공찾기"],
+    "승부예측":      ["승부 예측", "승부예측"],
+}
+
+# 절대 변경하지 않는 고정 이벤트 유형 (A타입)
+FIXED_EVENT_TYPES: set[str] = {"포인트레이스", "룰렛이벤트", "빙고이벤트"}
+
+# 이벤트 유형별 고정 후미 패턴 (새 제목 생성 시 보존할 부분)
+EVENT_SUFFIX_PATTERNS: dict[str, re.Pattern] = {
+    "출석이벤트":    re.compile(r"(\d+일\s*출석\s*이벤트\S*)"),
+    "응모권이벤트":  re.compile(r"(응모권\s*이벤트\S*)"),
+    "미션이벤트":    re.compile(r"(플레이\s*미션\s*이벤트\S*)"),
+    "교환소이벤트":  re.compile(r"(교환소\s*이벤트\S*)"),
+    "오더경쟁이벤트":re.compile(r"(오더\s*경쟁\s*이벤트\S*)"),
+    "야구공찾기":    re.compile(r"(야구공\s*찾기\s*이벤트\S*)"),
+    "PvP이벤트":    re.compile(r"(pvp.*이벤트\S*)", re.IGNORECASE),
+    "응모권이벤트":  re.compile(r"(응모권\s*이벤트\S*)"),
+}
+
+
+def detect_event_type(title: str) -> str:
+    """이벤트 제목에서 이벤트 유형 감지."""
+    tl = title.lower().replace(" ", "")
+    for etype, keywords in EVENT_TYPE_MAP.items():
+        if any(kw.replace(" ", "").lower() in tl for kw in keywords):
+            return etype
+    return "기타"
 
 
 def analyze_title_stability(wb) -> tuple[set, set]:
     """
-    소스 xlsx의 모든 날짜형 탭을 분석해
-    '항상 동일한 제목'(stable)과 '탭마다 달라지는 제목'(changeable) 을 분류.
+    이벤트 유형 기반 STABLE / CHANGEABLE 분류.
+
+    - 같은 이벤트 유형이 탭마다 다른 제목 → CHANGEABLE
+    - 고정 이벤트 유형(포인트레이스/룰렛/빙고) → 항상 STABLE
+    - 단 하나의 탭에만 있거나 항상 동일 → STABLE
 
     Returns:
-        stable_titles   — 모든 탭에서 동일하게 유지되는 제목 집합
-        changeable_bases — 탭마다 달라진 제목의 기본 패턴 집합
+        stable_titles    — 변경하지 않을 제목 집합
+        changeable_types — 변경 대상 이벤트 유형 집합
     """
     date_tabs = sorted([s for s in wb.sheetnames if re.fullmatch(r"\d{6}", s)])
     if not date_tabs:
         return set(), set()
 
-    # base_pattern → set of actual titles seen across all tabs
-    base_to_variants: dict[str, set] = {}
-    all_titles_seen:  set[str] = set()
+    # event_type → set of unique titles seen
+    type_to_titles: dict[str, set] = {}
+    title_to_type:  dict[str, str] = {}
 
     for tab in date_tabs:
         for title in extract_section_titles(wb, tab):
-            base = _get_base_pattern(title)
-            base_to_variants.setdefault(base, set()).add(title)
-            all_titles_seen.add(title)
+            etype = detect_event_type(title)
+            # 숫자 접두사 제거 후 비교 ("6. PvP ..." == "PvP ..." 동일 취급)
+            normalized = re.sub(r"^\d+\.\s*", "", title).strip()
+            type_to_titles.setdefault(etype, set()).add(normalized)
+            title_to_type[title] = etype
 
     stable_titles:    set[str] = set()
-    changeable_bases: set[str] = set()
+    changeable_types: set[str] = set()
 
-    for base, variants in base_to_variants.items():
-        if len(variants) == 1:
-            stable_titles.add(next(iter(variants)))   # 항상 동일 → STABLE
+    for etype, titles in type_to_titles.items():
+        if etype in FIXED_EVENT_TYPES:
+            stable_titles.update(titles)        # 고정 이벤트 → 모두 STABLE
+        elif len(titles) == 1:
+            stable_titles.update(titles)        # 변형 없음 → STABLE
         else:
-            changeable_bases.add(base)                 # 여러 변형 존재 → CHANGEABLE
+            changeable_types.add(etype)         # 변형 있음 → CHANGEABLE
 
-    return stable_titles, changeable_bases
+    print(f"  고정(STABLE) 이벤트 유형: {sorted(FIXED_EVENT_TYPES & set(type_to_titles))}")
+    print(f"  변경(CHANGEABLE) 이벤트 유형: {sorted(changeable_types)}")
+    return stable_titles, changeable_types
+
+
+def _generate_creative_title(
+    old_title:     str,
+    event_type:    str,
+    target_m:      int,
+    genre_phrases: list[str],
+    learned_kws:   list[str],
+) -> str | None:
+    """
+    시즌 키워드가 없는 CHANGEABLE 제목을 위해 새 제목 생성.
+    이벤트 유형의 핵심 후미(출석 이벤트 / 응모권 이벤트 등)를 보존하고
+    앞에 시즌 키워드를 붙인다.
+
+    예) "1. 벚꽃 엔딩 14일 출석 이벤트!" → "1. 7월의 14일 출석 이벤트!"
+    예) "2. 스프링 피날레 챌린지 응모권 이벤트!" → "2. 7월의 응모권 이벤트!"
+    """
+    season_kw = pick_best_season_kw(target_m, learned_kws, genre_phrases, "의")
+    if not season_kw:
+        return None
+
+    # 번호 접두사 분리
+    num_m = re.match(r"^(\d+\.\s*)(.*)", old_title)
+    num_prefix = num_m.group(1) if num_m else ""
+    body       = num_m.group(2) if num_m else old_title
+
+    # 이벤트 유형 후미 패턴으로 핵심 부분 추출
+    pat = EVENT_SUFFIX_PATTERNS.get(event_type)
+    if pat:
+        m = pat.search(body)
+        if m:
+            return f"{num_prefix}{season_kw} {m.group(1)}"
+
+    # fallback: 기존 제목 앞에 시즌 키워드 삽입
+    return f"{num_prefix}{season_kw} {body}"
 
 
 def generate_new_title(
@@ -249,20 +331,27 @@ def generate_new_title(
     learned_kws:     list[str],
     genre_phrases:   list[str],
     stable_titles:   set | None = None,
-    changeable_bases: set | None = None,
+    changeable_types: set | None = None,   # ← 기존 changeable_bases 대체
 ) -> str | None:
     """
     이벤트 제목을 대상 월에 맞게 교체한다.
 
     규칙:
-    - STABLE(역사적으로 변경된 적 없는) 제목 → 무조건 유지
-    - 시즌 키워드 감지됨 → 키워드 교체
-    - 시즌 키워드 없음 + CHANGEABLE + 월 다름 → 시즌 키워드 접두어 삽입
+    - STABLE 제목 → 무조건 유지
+    - CHANGEABLE + 시즌 키워드 감지 → 키워드 교체
+    - CHANGEABLE + 시즌 키워드 없음 + 월 다름 → _generate_creative_title로 새 제목 생성
     - 그 외 → 유지
     """
     # ── STABLE 제목 → 항상 유지 ──────────────────────────────────────────────
     if stable_titles and old_title in stable_titles:
         return None
+
+    # ── 이벤트 유형 확인 ─────────────────────────────────────────────────────
+    etype = detect_event_type(old_title)
+    is_changeable = (changeable_types is None) or (etype in changeable_types)
+
+    if not is_changeable:
+        return None   # CHANGEABLE 아닌 이벤트 유형 → 유지
 
     detected = detect_season_keyword(old_title)
 
@@ -275,24 +364,13 @@ def generate_new_title(
         new_title = old_title.replace(old_kw, new_kw, 1)
         return new_title if new_title != old_title else None
 
-    # ── Case 2: 시즌 키워드 없음 + CHANGEABLE + 월 다름 → 접두어 삽입 ────────
-    # CHANGEABLE 여부 확인: changeable_bases에 기본 패턴이 있어야 함
+    # ── Case 2: 시즌 키워드 없음 + CHANGEABLE + 월 다름 → 창의적 제목 생성 ──
     if old_month == target_month:
-        return None
-    base = _get_base_pattern(old_title)
-    if changeable_bases and base not in changeable_bases:
-        return None   # CHANGEABLE 아님 → 유지
+        return None   # 같은 달이면 변경 불필요
 
-    # 번호형 제목("1. 텍스트") 에만 접두어 삽입
-    num_m = re.match(r"^(\d+\.\s*)(.*)", old_title)
-    if not num_m:
-        return None
-
-    prefix_kw = pick_best_season_kw(target_month, learned_kws, genre_phrases, "의")
-    if not prefix_kw or prefix_kw.rstrip("의") in old_title:
-        return None
-
-    return f"{num_m.group(1)}{prefix_kw} {num_m.group(2)}"
+    return _generate_creative_title(
+        old_title, etype, target_month, genre_phrases, learned_kws
+    )
 
 
 # ─── 메인 ─────────────────────────────────────────────────────────────────────
@@ -359,17 +437,11 @@ def generate(
 
     wb = openpyxl.load_workbook(source_xlsx, data_only=True)
 
-    # ── 전체 탭 분석: STABLE / CHANGEABLE 분류 ─────────────────────────────
-    stable_titles, changeable_bases = analyze_title_stability(wb)
-    print(f"\n[제목 패턴 분석]")
-    print(f"  STABLE  (변경 안 함): {len(stable_titles)}개")
-    print(f"  CHANGEABLE (변경 대상): {len(changeable_bases)}개 기본 패턴")
-    if stable_titles:
-        for t in sorted(stable_titles)[:10]:
-            print(f"    [유지] {t}")
-    if changeable_bases:
-        for b in sorted(changeable_bases)[:10]:
-            print(f"    [변경] 기본패턴: {b}")
+    # ── 전체 탭 분석: STABLE / CHANGEABLE 분류 (이벤트 유형 기반) ────────────
+    print(f"\n[제목 패턴 분석 — 이벤트 유형 기반]")
+    stable_titles, changeable_types = analyze_title_stability(wb)
+    print(f"  STABLE  제목 수: {len(stable_titles)}개")
+    print(f"  CHANGEABLE 유형: {sorted(changeable_types)}")
 
     all_replacements: dict[str, list] = {}
     stats: dict[str, int] = {}
@@ -399,7 +471,7 @@ def generate(
                 old_title, old_month, target_m,
                 learned_kws_for_target, genre_phrases,
                 stable_titles=stable_titles,
-                changeable_bases=changeable_bases,
+                changeable_types=changeable_types,
             )
             if new_title:
                 replacements.append((old_title, new_title))
