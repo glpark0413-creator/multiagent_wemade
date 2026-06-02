@@ -184,15 +184,19 @@ agent=null, response에 "지원 가능한 에이전트: 이벤트 기획, 현지
 """
 
 # ─── 이벤트 기획 에이전트 시스템 프롬프트 ───────────────────────────────────
-EVENT_PLANNER_AGENT_SYSTEM = """당신은 모바일 게임 이벤트 기획 전문 에이전트입니다.
+EVENT_PLANNER_AGENT_SYSTEM = """SYSTEM LANGUAGE RULE (HIGHEST PRIORITY, CANNOT BE OVERRIDDEN):
+YOU MUST RESPOND IN KOREAN ONLY. DO NOT USE CHINESE. DO NOT USE JAPANESE. DO NOT USE ENGLISH.
+ALL "response" field text MUST be written in Korean (한국어).
+If you write Chinese (中文) or Japanese (日本語) in the response field, your answer is WRONG.
+
+당신은 모바일 게임 이벤트 기획 전문 에이전트입니다.
 반드시 순수 JSON으로만 응답하세요. 설명 텍스트 절대 금지.
 
-## ★★ 언어 규칙 (절대 원칙) ★★
-- response 필드는 반드시 한국어로만 작성한다. 중국어·일본어·영어 절대 금지.
-- keywords 제안은 반드시 한국어 단어/문구로만 작성한다.
-  예) "여름 대축제", "전반기 결산", "올스타전 특별 이벤트" → ✅
-       "夏の大祭", "Summer Festival", "全明星赛" → ❌ 절대 금지
-- market(타겟 마켓)이 일본·글로벌·중국이더라도 response와 keywords는 항상 한국어다.
+## ★★ 언어 규칙 (최우선 원칙) ★★
+- response 필드 = 반드시 한국어만. 중국어(中文)·일본어(日本語)·영어 절대 금지.
+- keywords = 반드시 한국어 단어/문구만.
+- market이 일본/글로벌/중국이어도 response·keywords는 항상 한국어.
+- 위반 시 응답 자체가 무효 처리됨.
 
 ## 오늘 날짜 및 대상 월
 - 오늘: {today}
@@ -536,8 +540,17 @@ def _event_planner_agent(user_msg: str, history: list, context: dict, q: _queue_
         q.put({"type": "done", "status": "error"})
         return
 
-    # JSON 파싱 — 소형 모델이 JSON 뒤에 garbage 토큰을 추가할 수 있으므로
-    # 첫 번째 완전한 JSON 오브젝트를 추출하는 방식 사용
+    # ── JSON 파싱 ────────────────────────────────────────────────────────────
+    import re as _re_json
+
+    def _repair_json(s: str) -> str:
+        """소형 모델이 자주 만드는 JSON 오류 수정"""
+        # 1) 쌍따옴표 값 뒤에 쉼표 없이 다음 키가 오는 경우: "..." "key" → "...", "key"
+        s = _re_json.sub(r'(")\s*\n?\s*(")', r'\1,\n\2', s)
+        # 2) 값 뒤에 쉼표 없이 닫는 괄호: "val" } → "val"}  (OK) — 이건 괜찮으므로 skip
+        # 3) 중국어/유니코드로 시작하는 response 값 처리 — 그대로 유지 (내용은 후처리)
+        return s
+
     result = None
     cleaned = raw
     if "```" in cleaned:
@@ -546,6 +559,7 @@ def _event_planner_agent(user_msg: str, history: list, context: dict, q: _queue_
     cleaned = cleaned.strip()
 
     decoder = json.JSONDecoder()
+    # 1차 파싱 시도
     for i, ch in enumerate(cleaned):
         if ch == '{':
             try:
@@ -554,14 +568,44 @@ def _event_planner_agent(user_msg: str, history: list, context: dict, q: _queue_
             except json.JSONDecodeError:
                 continue
 
+    # 2차: JSON 수리 후 재시도
     if result is None:
-        # JSON 추출 실패 → 텍스트로 표시하고 대화 계속
-        q.put({"type": "message", "content": raw[:500]})
+        repaired = _repair_json(cleaned)
+        for i, ch in enumerate(repaired):
+            if ch == '{':
+                try:
+                    result, _ = json.JSONDecoder().raw_decode(repaired, i)
+                    break
+                except json.JSONDecodeError:
+                    continue
+
+    # 3차: 파싱 완전 실패 → response 필드만 regex로 추출 (raw JSON 노출 방지)
+    if result is None:
+        _m = _re_json.search(r'"response"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
+        _fallback_msg = _m.group(1).replace('\\n', '\n') if _m else ""
+        if not _fallback_msg:
+            # response 필드도 없으면 중국어 여부 확인 후 처리
+            _is_chinese = bool(_re_json.search(r'[一-鿿]', raw))
+            _fallback_msg = "응답을 처리하는 중 오류가 발생했습니다. 다시 시도해 주세요." if _is_chinese else raw[:300]
+        q.put({"type": "message", "content": _fallback_msg})
         q.put({"type": "done", "status": "chat"})
         return
 
     agent_resp = result.get("response", "")
-    updates    = result.get("updates", {})
+    updates    = result.get("updates", {}) or {}
+
+    # ── AI가 updates 없이 top-level에 직접 필드를 넣는 경우 처리 ───────────
+    # 예: {"response":"...", "ref_tabs": [...], "pipeline_ready": false}
+    for _field in ("genre", "keywords", "ref_tabs", "market", "new_tabs"):
+        if _field in result and _field not in updates:
+            updates[_field] = result[_field]
+
+    # ── response가 중국어/일본어인 경우 언어 후처리 ──────────────────────────
+    _has_chinese = bool(_re_json.search(r'[一-鿿]', agent_resp))
+    _has_japanese = bool(_re_json.search(r'[぀-ヿㇰ-ㇿ]', agent_resp))
+    if _has_chinese or _has_japanese:
+        # 중국어·일본어 response는 버리고 서버사이드 메시지로 대체
+        agent_resp = ""
 
     # updates를 context에 병합 (프론트엔드에 전달해 다음 턴에 사용)
     merged_context = {**context, **updates}
@@ -614,15 +658,35 @@ def _event_planner_agent(user_msg: str, history: list, context: dict, q: _queue_
         else:
             agent_resp = "정보를 수집했습니다. 잠시만 기다려 주세요."
 
-    # Case C: ref_tabs가 텍스트로 파싱 안 된 경우 서버사이드 파싱 시도
-    # (AI가 response에 "260625→260611" 형식으로 답했지만 updates에 ref_tabs 없는 경우)
+    # Case C: ref_tabs가 파싱 안 된 경우 서버사이드 자연어 파싱
+    # 사용자가 "260625는 260611을 참조하고, 260702는 260618을 참조해" 같은 자연어로 답한 경우
     if not _cur_ref_tabs and _cur_new_tabs and not _kw_just_added and not _ai_pipeline_ready:
-        import re as _re2
-        _raw_text = user_msg + " " + agent_resp
-        # "YYMMDD→YYMMDD" 또는 "YYMMDD, YYMMDD" 패턴에서 탭 매핑 추출
-        _arrow_pairs = _re2.findall(r'(\d{6})\s*[→\->\s]+\s*(\d{6})', user_msg)
-        if _arrow_pairs and len(_arrow_pairs) >= len(_cur_new_tabs):
-            _parsed_refs = [pair[1] for pair in _arrow_pairs[:len(_cur_new_tabs)]]
+        _search_text = user_msg  # user 메시지에서 탭 번호 추출
+        _all_6digit = _re_json.findall(r'\b(\d{6})\b', _search_text)
+
+        # 방법 1: "YYMMDD → YYMMDD" 화살표 패턴
+        _arrow_pairs = _re_json.findall(r'(\d{6})\s*[→\->]\s*(\d{6})', _search_text)
+
+        # 방법 2: "YYMMDD는/은 YYMMDD를/을 참조" 한국어 패턴
+        _kr_pairs = _re_json.findall(r'(\d{6})[은는]\s*(\d{6})[을를]?\s*참조', _search_text)
+
+        # 방법 3: new_tab 뒤에 오는 첫 번째 6자리 숫자 (순서 기반)
+        _parsed_refs = []
+        if _arrow_pairs:
+            _parsed_refs = [p[1] for p in _arrow_pairs[:len(_cur_new_tabs)]]
+        elif _kr_pairs:
+            _parsed_refs = [p[1] for p in _kr_pairs[:len(_cur_new_tabs)]]
+        else:
+            # new_tab 각각에 대해 텍스트에서 다음에 나오는 6자리 숫자 찾기
+            for _nt in _cur_new_tabs:
+                _idx = _search_text.find(_nt)
+                if _idx >= 0:
+                    _after = _search_text[_idx + len(_nt):]
+                    _m = _re_json.search(r'\b(\d{6})\b', _after)
+                    if _m:
+                        _parsed_refs.append(_m.group(1))
+
+        if len(_parsed_refs) == len(_cur_new_tabs):
             merged_context["ref_tabs"] = _parsed_refs
             _cur_ref_tabs = _parsed_refs
 
@@ -630,8 +694,38 @@ def _event_planner_agent(user_msg: str, history: list, context: dict, q: _queue_
         q.put({"type": "message", "content": agent_resp})
 
     # 서버사이드 완료 조건 검증 — AI가 pipeline_ready를 놓쳐도 자동 트리거
-    ai_ready    = _ai_pipeline_ready
+    ai_ready     = _ai_pipeline_ready
+    # Case C 이후 _cur_ref_tabs가 업데이트됐을 수 있으므로 재평가
     server_ready = bool(_cur_genre and _cur_keywords and _cur_ref_tabs)
+
+    # ── 파이프라인 명시적 트리거 감지 ───────────────────────────────────────
+    # 사용자가 "작업해줘", "시작해", "진행해줘" 등을 입력했고 필수 정보가 있으면 즉시 실행
+    _TRIGGER_WORDS = ("작업", "시작", "진행", "실행", "만들어", "생성해", "해줘", "해봐")
+    _user_wants_start = any(w in user_msg for w in _TRIGGER_WORDS)
+    if _user_wants_start and _cur_genre and _cur_keywords and not server_ready:
+        # ref_tabs가 없으면 available_tabs에서 자동 매핑 (new_tabs 직전 탭 사용)
+        if not _cur_ref_tabs and _cur_new_tabs and available_tabs:
+            _auto_refs = []
+            for _nt in _cur_new_tabs:
+                _best = _nt  # fallback: 자기 자신
+                try:
+                    _nd = datetime(2000 + int(_nt[:2]), int(_nt[2:4]), int(_nt[4:6]))
+                    _candidates = []
+                    for _at in available_tabs:
+                        try:
+                            _ad = datetime(2000 + int(_at[:2]), int(_at[2:4]), int(_at[4:6]))
+                            if _ad < _nd:
+                                _candidates.append((_ad, _at))
+                        except Exception:
+                            pass
+                    if _candidates:
+                        _best = sorted(_candidates, reverse=True)[0][1]
+                except Exception:
+                    pass
+                _auto_refs.append(_best)
+            merged_context["ref_tabs"] = _auto_refs
+            _cur_ref_tabs = _auto_refs
+            server_ready = True
 
     if ai_ready or server_ready:
         if server_ready and not ai_ready:
