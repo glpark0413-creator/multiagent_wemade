@@ -401,31 +401,136 @@ def pm_stream(job_id):
     )
 
 
+def _pm_rule_route(user_msg: str, history: list) -> dict | None:
+    """
+    claude_cli 모드용 규칙 기반 PM 라우팅.
+    LLM 없이 키워드/패턴으로 의도를 파악하고 에이전트를 결정한다.
+    라우팅 불가 시 None 반환 → 기본 안내 메시지 출력.
+    """
+    import re as _re
+
+    # 전체 대화 이력 + 현재 메시지에서 파라미터 누적 수집
+    all_text = " ".join(
+        m["content"] for m in history if m["role"] == "user"
+    ) + " " + user_msg
+
+    # ── 에이전트 분류 ──────────────────────────────────────────────────────────
+    EVENT_KW  = ["이벤트 기획", "기획안", "이벤트 생성", "이벤트 시트",
+                 "탭 생성", "이벤트 만들", "이벤트 문서", "xlsx 만들", "이벤트 작성"]
+    LOCAL_KW  = ["번역", "현지화", "로컬라이징", "localization", "용어집"]
+
+    is_event = any(kw in all_text for kw in EVENT_KW)
+    is_local = any(kw in all_text for kw in LOCAL_KW)
+
+    # Google Sheets URL
+    url_m = _re.search(r'https://docs\.google\.com/spreadsheets/[^\s\]>]+', all_text)
+    sheets_url = url_m.group(0).rstrip(".,)") if url_m else None
+
+    # xlsx 파일 경로
+    xlsx_m = _re.search(r'[\w/\\: ]+\.xlsx', all_text)
+    xlsx_path = xlsx_m.group(0).strip() if xlsx_m else None
+
+    source = sheets_url or xlsx_path
+
+    # YYMMDD 날짜 탭 목록
+    tabs = list(dict.fromkeys(_re.findall(r'\b(2[0-9]{5})\b', all_text)))
+
+    # 마켓
+    market = None
+    for m_kw in ["한국", "일본", "글로벌", "중국"]:
+        if m_kw in all_text:
+            market = m_kw
+            break
+
+    # ── 이벤트 기획 분기 ───────────────────────────────────────────────────────
+    if is_event or source or (tabs and not is_local):
+        params: dict = {}
+        missing: list = []
+
+        if source:
+            params["source_path"] = source
+        else:
+            missing.append("source_path (Google Sheets URL 또는 xlsx 경로)")
+
+        if tabs:
+            params["new_tabs"] = tabs
+        else:
+            missing.append("new_tabs (생성할 탭 날짜, 예: 260625)")
+
+        if market:
+            params["market"] = market
+        else:
+            missing.append("market (한국/일본/글로벌)")
+
+        ready = len(missing) == 0
+
+        if ready:
+            resp = f"이벤트 기획을 시작합니다.\n- 소스: {source}\n- 탭: {', '.join(tabs)}\n- 마켓: {market}"
+        else:
+            resp = "이벤트 기획 에이전트로 연결합니다. 다음 정보를 에이전트가 추가로 확인합니다:\n" + \
+                   "\n".join(f"- {m}" for m in missing)
+
+        return {"agent": "event-planner", "ready": ready, "params": params,
+                "missing": missing, "response": resp}
+
+    # ── 현지화 번역 분기 ───────────────────────────────────────────────────────
+    if is_local:
+        params = {}
+        if sheets_url:
+            params["gsheet_url"] = sheets_url
+        elif xlsx_path:
+            params["excel_path"] = xlsx_path
+        ready = bool(params)
+        resp = "현지화 번역 에이전트로 연결합니다." if ready else \
+               "번역할 Google Sheets URL 또는 Excel 파일 경로를 알려주세요."
+        return {"agent": "game-localizer", "ready": ready, "params": params, "response": resp}
+
+    return None   # 분류 불가
+
+
 def _pm_process(user_msg: str, history: list, q: _queue_module.Queue):
-    """PM 분석 → 에이전트 위임 (Ollama 또는 Claude API)"""
+    """PM 분석 → 에이전트 위임"""
 
     if not HAS_AI:
+        # claude_cli 모드는 HAS_AI=True이므로 여기는 none 모드만 도달
         q.put({"type": "message", "content":
-               "⚠️ AI가 설정되지 않았습니다.\n\n"
-               "**Ollama 사용 시** — 환경변수를 설정하세요:\n"
-               "`OLLAMA_HOST=http://맥북IP:11434`\n"
-               "`OLLAMA_MODEL=llama3.2` (또는 원하는 모델)\n\n"
-               "그 후 서버를 재시작하면 PM이 활성화됩니다.\n"
-               "지금은 좌측 메뉴에서 에이전트를 직접 선택해 수동으로 실행하세요."})
+               "AI가 설정되지 않았습니다. 서버를 재시작하거나 claude CLI를 설치해주세요."})
         q.put({"type": "done", "status": "no_ai"})
         return
 
+    # ── claude_cli 모드: 규칙 기반 라우팅 (LLM은 키워드 생성에만 사용) ────────
+    if AI_MODE == "claude_cli":
+        result = _pm_rule_route(user_msg, history)
+        if result is None:
+            # 라우팅 불가 → 지원 에이전트 안내
+            q.put({"type": "message", "content":
+                   "[PM] 안녕하세요. 다음 작업을 도와드릴 수 있습니다.\n\n"
+                   "**이벤트 기획**: Google Sheets URL 또는 xlsx 파일 경로와 함께 "
+                   "생성할 탭 날짜를 알려주세요.\n"
+                   "예) `아래 URL 기반으로 260625, 260702 탭 생성해줘`\n\n"
+                   "**현지화 번역**: 번역할 파일 경로나 Google Sheets URL을 알려주세요."})
+            q.put({"type": "done", "status": "chat"})
+            return
+
+        if result.get("response"):
+            q.put({"type": "message", "content": result["response"]})
+
+        if result.get("ready") and result.get("agent") == "event-planner":
+            q.put({"type": "handoff", "agent": "event-planner", "params": result["params"]})
+            q.put({"type": "done", "status": "handoff"})
+        elif result.get("ready") and result.get("agent") == "game-localizer":
+            _run_localizer_pipeline(result["params"], q)
+        else:
+            # 정보 부족 → 에이전트에 handoff해서 나머지 수집하게 함
+            q.put({"type": "handoff", "agent": result["agent"],
+                   "params": result.get("params", {})})
+            q.put({"type": "done", "status": "handoff"})
+        return
+
+    # ── Ollama / Anthropic 모드: LLM 기반 라우팅 ─────────────────────────────
     messages = history + [{"role": "user", "content": user_msg}]
 
-    if AI_MODE == "claude_cli":
-        # 대화 이력을 하나의 프롬프트로 결합
-        conv_lines = [f"[시스템 지침]\n{PM_SYSTEM}\n"]
-        for m in messages:
-            role = "사용자" if m["role"] == "user" else "PM"
-            conv_lines.append(f"[{role}] {m['content']}")
-        conv_lines.append("[PM] ")
-        raw = _call_claude_cli("\n".join(conv_lines), timeout=60)
-    elif AI_MODE == "ollama":
+    if AI_MODE == "ollama":
         resp = _AI.chat.completions.create(
             model=OLLAMA_MODEL,
             messages=[{"role": "system", "content": PM_SYSTEM}] + messages,
