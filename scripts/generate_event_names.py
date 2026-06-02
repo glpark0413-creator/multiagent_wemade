@@ -199,18 +199,71 @@ def pick_best_season_kw(
     return base
 
 
+def _get_base_pattern(title: str) -> str:
+    """제목에서 시즌 키워드를 제거한 기본 패턴 (변경 여부 비교용)."""
+    result = title
+    for pat in SEASON_PATTERNS:
+        result = pat.sub("", result)
+    return re.sub(r"\s{2,}", " ", result).strip()
+
+
+def analyze_title_stability(wb) -> tuple[set, set]:
+    """
+    소스 xlsx의 모든 날짜형 탭을 분석해
+    '항상 동일한 제목'(stable)과 '탭마다 달라지는 제목'(changeable) 을 분류.
+
+    Returns:
+        stable_titles   — 모든 탭에서 동일하게 유지되는 제목 집합
+        changeable_bases — 탭마다 달라진 제목의 기본 패턴 집합
+    """
+    date_tabs = sorted([s for s in wb.sheetnames if re.fullmatch(r"\d{6}", s)])
+    if not date_tabs:
+        return set(), set()
+
+    # base_pattern → set of actual titles seen across all tabs
+    base_to_variants: dict[str, set] = {}
+    all_titles_seen:  set[str] = set()
+
+    for tab in date_tabs:
+        for title in extract_section_titles(wb, tab):
+            base = _get_base_pattern(title)
+            base_to_variants.setdefault(base, set()).add(title)
+            all_titles_seen.add(title)
+
+    stable_titles:    set[str] = set()
+    changeable_bases: set[str] = set()
+
+    for base, variants in base_to_variants.items():
+        if len(variants) == 1:
+            stable_titles.add(next(iter(variants)))   # 항상 동일 → STABLE
+        else:
+            changeable_bases.add(base)                 # 여러 변형 존재 → CHANGEABLE
+
+    return stable_titles, changeable_bases
+
+
 def generate_new_title(
-    old_title:    str,
-    old_month:    int,
-    target_month: int,
-    learned_kws:  list[str],
-    genre_phrases: list[str],
+    old_title:       str,
+    old_month:       int,
+    target_month:    int,
+    learned_kws:     list[str],
+    genre_phrases:   list[str],
+    stable_titles:   set | None = None,
+    changeable_bases: set | None = None,
 ) -> str | None:
     """
-    기존 제목에서 시즌 키워드를 찾아 대상 월 키워드로 교체한다.
-    시즌 키워드가 없고 참조 월 ≠ 대상 월이면 접두어로 삽입한다.
-    변경이 없으면 None 반환.
+    이벤트 제목을 대상 월에 맞게 교체한다.
+
+    규칙:
+    - STABLE(역사적으로 변경된 적 없는) 제목 → 무조건 유지
+    - 시즌 키워드 감지됨 → 키워드 교체
+    - 시즌 키워드 없음 + CHANGEABLE + 월 다름 → 시즌 키워드 접두어 삽입
+    - 그 외 → 유지
     """
+    # ── STABLE 제목 → 항상 유지 ──────────────────────────────────────────────
+    if stable_titles and old_title in stable_titles:
+        return None
+
     detected = detect_season_keyword(old_title)
 
     # ── Case 1: 시즌 키워드 감지됨 → 교체 ──────────────────────────────────
@@ -222,28 +275,24 @@ def generate_new_title(
         new_title = old_title.replace(old_kw, new_kw, 1)
         return new_title if new_title != old_title else None
 
-    # ── Case 2: 시즌 키워드 없음 + 참조 월 ≠ 대상 월 → 접두어 삽입 ──────────
-    # 예: "1. 응모권 이벤트!" → "1. 여름의 응모권 이벤트!" (월이 달라질 때만)
+    # ── Case 2: 시즌 키워드 없음 + CHANGEABLE + 월 다름 → 접두어 삽입 ────────
+    # CHANGEABLE 여부 확인: changeable_bases에 기본 패턴이 있어야 함
     if old_month == target_month:
-        return None   # 같은 달이면 접두어 불필요
+        return None
+    base = _get_base_pattern(old_title)
+    if changeable_bases and base not in changeable_bases:
+        return None   # CHANGEABLE 아님 → 유지
 
-    # 번호형 제목("1. 텍스트") 에만 접두어 삽입 (제목형은 건드리지 않음)
+    # 번호형 제목("1. 텍스트") 에만 접두어 삽입
     num_m = re.match(r"^(\d+\.\s*)(.*)", old_title)
     if not num_m:
         return None
 
     prefix_kw = pick_best_season_kw(target_month, learned_kws, genre_phrases, "의")
-    if not prefix_kw:
+    if not prefix_kw or prefix_kw.rstrip("의") in old_title:
         return None
 
-    # 이미 prefix_kw 가 포함된 경우 건너뜀
-    if prefix_kw.rstrip("의") in old_title:
-        return None
-
-    num_part  = num_m.group(1)   # "1. "
-    text_part = num_m.group(2)   # "응모권 이벤트!"
-    new_title = f"{num_part}{prefix_kw} {text_part}"
-    return new_title
+    return f"{num_m.group(1)}{prefix_kw} {num_m.group(2)}"
 
 
 # ─── 메인 ─────────────────────────────────────────────────────────────────────
@@ -310,6 +359,18 @@ def generate(
 
     wb = openpyxl.load_workbook(source_xlsx, data_only=True)
 
+    # ── 전체 탭 분석: STABLE / CHANGEABLE 분류 ─────────────────────────────
+    stable_titles, changeable_bases = analyze_title_stability(wb)
+    print(f"\n[제목 패턴 분석]")
+    print(f"  STABLE  (변경 안 함): {len(stable_titles)}개")
+    print(f"  CHANGEABLE (변경 대상): {len(changeable_bases)}개 기본 패턴")
+    if stable_titles:
+        for t in sorted(stable_titles)[:10]:
+            print(f"    [유지] {t}")
+    if changeable_bases:
+        for b in sorted(changeable_bases)[:10]:
+            print(f"    [변경] 기본패턴: {b}")
+
     all_replacements: dict[str, list] = {}
     stats: dict[str, int] = {}
 
@@ -337,14 +398,15 @@ def generate(
             new_title = generate_new_title(
                 old_title, old_month, target_m,
                 learned_kws_for_target, genre_phrases,
+                stable_titles=stable_titles,
+                changeable_bases=changeable_bases,
             )
             if new_title:
                 replacements.append((old_title, new_title))
                 changed += 1
-                print(f"  [{new_tab}] '{old_title}'\n"
-                      f"           → '{new_title}'")
+                print(f"  [{new_tab}] 변경: '{old_title}' → '{new_title}'")
             else:
-                print(f"  [{new_tab}] (유지) '{old_title}'")
+                print(f"  [{new_tab}] 유지: '{old_title}'")
 
         all_replacements[new_tab] = replacements
         stats[new_tab] = changed
