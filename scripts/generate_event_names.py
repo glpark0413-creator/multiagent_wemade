@@ -168,11 +168,23 @@ def pick_best_season_kw(
     """
     needs_eui = _has_trailing_eui(old_kw)
 
-    # "N월 이달의" 패턴 처리 — 숫자만 교체하면 됨
+    # "N월 이달의" 패턴 처리 — 숫자만 교체
     num_month_re = re.compile(r"^(\d+)(월\s*이달의)$")
     m = num_month_re.match(old_kw)
     if m:
-        return f"{target_month}{m.group(2)}"
+        result = f"{target_month}{m.group(2)}"
+        if result != old_kw:
+            return result
+        # 같은 월이면 대체 계절 키워드 사용 (같은 시트 복사 방지)
+        fb = MONTH_SEASON_FALLBACK.get(target_month, [])
+        alt = next((k for k in fb if k not in (old_kw, result)), None)
+        if alt:
+            if needs_eui and not alt.endswith("의"):
+                alt += "의"
+            elif not needs_eui and alt.endswith("의"):
+                alt = alt[:-1]
+            return alt
+        return None
 
     # genre_phrases 에서 시즌 패턴 매치
     for phrase in genre_phrases:
@@ -364,10 +376,9 @@ def generate_new_title(
         new_title = old_title.replace(old_kw, new_kw, 1)
         return new_title if new_title != old_title else None
 
-    # ── Case 2: 시즌 키워드 없음 + CHANGEABLE + 월 다름 → 창의적 제목 생성 ──
-    if old_month == target_month:
-        return None   # 같은 달이면 변경 불필요
-
+    # ── Case 2: 시즌 키워드 없음 + CHANGEABLE → 창의적 제목 생성 ──────────
+    # 같은 달이어도 참조 탭과 다른 창의적 이름으로 생성
+    # (동일 탭이 아닌 새 탭이므로 제목이 달라야 함)
     return _generate_creative_title(
         old_title, etype, target_month, genre_phrases, learned_kws
     )
