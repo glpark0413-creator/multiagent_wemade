@@ -304,9 +304,14 @@ function streamPmJob(jobId, { bubble, body }) {
         // step_fail / error 이벤트로 이미 표시됨
       }
 
-      // "처리 중..." 제거
+      // "처리 중..." 제거 — 메시지가 없었고 context_update만 있던 경우 버블 숨김
       if (body.innerHTML.includes('처리 중')) {
-        body.innerHTML = '<span style="color:#a0aec0;font-size:12px">(응답 없음)</span>';
+        if (ev.status === 'chat' || ev.status === 'handoff') {
+          // 응답 없이 done이 온 경우 빈 버블 제거
+          bubble.remove();
+        } else {
+          body.innerHTML = '<span style="color:#a0aec0;font-size:12px">(응답 없음)</span>';
+        }
       }
     }
 

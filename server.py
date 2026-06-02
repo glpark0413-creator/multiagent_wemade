@@ -149,6 +149,11 @@ ensure_dirs()
 PM_SYSTEM = """당신은 멀티 에이전트 PM(프로젝트 매니저)입니다.
 사용자의 의도를 파악해 에이전트에게 위임합니다. 항상 순수 JSON으로만 응답하세요.
 
+## ★★ 언어 규칙 (최우선 원칙) ★★
+- response 필드는 반드시 한국어(Korean)로만 작성한다.
+- 중국어(Chinese)·일본어(Japanese)·영어(English) 절대 금지.
+- 타겟 마켓이 일본·글로벌·중국이더라도 응답은 항상 한국어다.
+
 ## PM의 역할
 PM은 의도 파악 + 최소 기본 정보 수집만 합니다.
 상세 질문(장르, 키워드, 참조 탭 등)은 전문 에이전트가 직접 사용자에게 묻습니다.
@@ -495,12 +500,24 @@ def _event_planner_agent(user_msg: str, history: list, context: dict, q: _queue_
 
     messages = history + [{"role": "user", "content": user_msg}]
 
+    # ★ 언어 강제 지시 — 마지막 user 메시지에 주입 (API 호출 전용 복사본)
+    _lang_suffix = (
+        "\n\n[CRITICAL LANGUAGE RULE] "
+        "response 필드는 반드시 한국어(Korean)로만 작성할 것. "
+        "중국어(Chinese)·일본어(Japanese)·영어(English) 사용 절대 금지. "
+        "JSON의 모든 텍스트 값은 한국어만 허용."
+    )
+    api_messages = messages[:-1] + [{
+        "role": messages[-1]["role"],
+        "content": messages[-1]["content"] + _lang_suffix
+    }]
+
     # AI 호출
     try:
         if AI_MODE == "ollama":
             resp = _AI.chat.completions.create(
                 model=OLLAMA_MODEL,
-                messages=[{"role": "system", "content": system}] + messages,
+                messages=[{"role": "system", "content": system}] + api_messages,
                 temperature=0.2,
             )
             raw = resp.choices[0].message.content.strip()
@@ -509,7 +526,7 @@ def _event_planner_agent(user_msg: str, history: list, context: dict, q: _queue_
                 model="claude-sonnet-4-6",
                 max_tokens=1024,
                 system=system,
-                messages=messages,
+                messages=api_messages,
             )
             raw = resp.content[0].text.strip()
     except Exception as e:
@@ -552,6 +569,32 @@ def _event_planner_agent(user_msg: str, history: list, context: dict, q: _queue_
 
     # ── 서버사이드 보정 2: 비활성화 — 에이전트가 직접 ref_tabs를 수집하도록 함 ──
     # (자동 ref_tabs 파싱 로직 제거: 에이전트가 항상 사용자에게 직접 질문)
+
+    # ── 서버사이드 response 빈값 보정 ─────────────────────────────────────
+    # AI가 response를 비워두면 "(응답 없음)" 버블이 뜸 → 단계에 맞는 자동 메시지 생성
+    if not agent_resp and not result.get("pipeline_ready", False):
+        _g = merged_context.get("genre", "")
+        _k = merged_context.get("keywords", [])
+        _r = merged_context.get("ref_tabs", [])
+        _n = merged_context.get("new_tabs", [])
+        if not _g:
+            agent_resp = "어떤 장르의 게임인가요? (예: 야구, 축구, MMORPG, 캐주얼, 퍼즐)"
+        elif not _k:
+            agent_resp = f"'{_g}' 장르로 설정됐습니다. 이벤트에 사용할 키워드를 선택해 주세요."
+        elif not _r:
+            _tab_hint = ""
+            if _n and available_tabs:
+                _tab_hint = f"\n예: {_n[0]}→{available_tabs[0]}"
+                if len(_n) > 1 and len(available_tabs) > 1:
+                    _tab_hint += f", {_n[1]}→{available_tabs[1]}"
+            agent_resp = (
+                f"키워드가 저장됐습니다! 이제 각 탭의 참조 탭을 알려주세요.\n\n"
+                f"생성할 탭: {', '.join(_n)}\n"
+                f"사용 가능한 탭: {', '.join(available_tabs[:10]) if available_tabs else '확인 불가'}"
+                f"{_tab_hint}"
+            )
+        else:
+            agent_resp = "정보를 수집했습니다. 잠시만 기다려 주세요."
 
     if agent_resp:
         q.put({"type": "message", "content": agent_resp})
