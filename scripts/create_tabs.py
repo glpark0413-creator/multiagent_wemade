@@ -44,12 +44,15 @@ OUTPUT_FILE = OUTPUT_FILE_DIR / "이벤트기획_260625_260702.xlsx"
 EVENT_NAMES_CONFIG = OUTPUT_JSON_DIR / "event_names_config.json"
 
 # ─── 변경 셀 하이라이트 색상 ────────────────────────────────────────────────
-# 이벤트 명칭 변경: 노랑
-FILL_EVENT_NAME = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
 # 날짜(datetime) 변경: 연파랑
-FILL_DATE       = PatternFill(start_color="BDD7EE", end_color="BDD7EE", fill_type="solid")
-# 기타 텍스트(날짜 문자열·헤더 등) 변경: 연초록
-FILL_TEXT       = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+FILL_DATE   = PatternFill(start_color="BDD7EE", end_color="BDD7EE", fill_type="solid")
+# 날짜 문자열·헤더 변경: 연초록
+FILL_TEXT   = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
+# 보상 변경: 연주황 (이전 시트 대비 보상 아이템/수량 차이)
+FILL_REWARD = PatternFill(start_color="FFD966", end_color="FFD966", fill_type="solid")
+
+# 보상 데이터가 위치하는 열 번호 (E=5, F=6, G=7, H=8, I=9)
+REWARD_COLS: frozenset[int] = frozenset({5, 6, 7, 8, 9})
 
 # 시즌·월 키워드: 이 단어가 포함된 셀은 수동 검토 권장
 SEASON_KEYWORDS = [
@@ -164,24 +167,21 @@ def load_event_names_config():
 
 def apply_replacements(ws, replacements, date_map=None, event_name_replacements=None):
     """
-    워크시트 전체 셀에 치환 적용 + 변경된 셀 하이라이트.
+    워크시트 전체 셀에 치환 적용 + 날짜 변경 하이라이트.
     - datetime/date 객체: date_map으로 직접 날짜 갱신 → 연파랑 하이라이트
-    - str (이벤트 명칭): event_name_replacements → 노랑 하이라이트
-    - str (날짜·헤더 등): replacements + date_map → 연초록 하이라이트
+    - str (날짜 문자열·헤더): replacements + date_map → 연초록 하이라이트
+    - str (이벤트 명칭): event_name_replacements → 하이라이트 없음 (보상 비교와 별개)
     """
     changed = []
     _event_repls = list(event_name_replacements or [])
     _text_repls  = list(replacements)
-
-    # event_name_replacements 의 old 값 집합 (하이라이트 구분용)
-    _event_olds = {old for old, _ in _event_repls}
 
     for row in ws.iter_rows():
         for cell in row:
             if cell.value is None:
                 continue
 
-            # ── datetime / date 객체: date_map으로 직접 매핑 ──────────────────
+            # ── datetime / date 객체: date_map으로 직접 매핑 → 연파랑 ──────────
             if isinstance(cell.value, (datetime, date)):
                 if not date_map:
                     continue
@@ -199,7 +199,7 @@ def apply_replacements(ws, replacements, date_map=None, event_name_replacements=
                     new_date = date(year, month, day)
                 changed.append((cell.coordinate, str(old_date), str(new_date)))
                 cell.value = new_date
-                cell.fill  = FILL_DATE      # 날짜 변경: 연파랑
+                cell.fill  = FILL_DATE
                 continue
 
             if not isinstance(cell.value, str):
@@ -207,13 +207,10 @@ def apply_replacements(ws, replacements, date_map=None, event_name_replacements=
 
             original_val = cell.value
             new_val      = cell.value
-            changed_by_event = False
 
-            # 1) 이벤트 명칭 치환 (노랑 하이라이트 대상)
+            # 1) 이벤트 명칭 치환 (하이라이트 없음 — 보상 비교로 대체)
             for old, new in _event_repls:
-                if old in new_val:
-                    new_val = new_val.replace(old, new)
-                    changed_by_event = True
+                new_val = new_val.replace(old, new)
 
             # 2) 날짜·헤더 등 일반 텍스트 치환
             for old, new in _text_repls:
@@ -231,13 +228,54 @@ def apply_replacements(ws, replacements, date_map=None, event_name_replacements=
             if new_val != original_val:
                 changed.append((cell.coordinate, original_val, new_val))
                 cell.value = new_val
-                # 변경 유형에 따라 하이라이트 색상 구분
-                if changed_by_event:
-                    cell.fill = FILL_EVENT_NAME   # 이벤트 명칭 변경: 노랑
-                else:
-                    cell.fill = FILL_TEXT         # 날짜·헤더 변경: 연초록
+                # 날짜·헤더 문자열 변경 → 연초록 (보상 열 제외)
+                if cell.column not in REWARD_COLS:
+                    cell.fill = FILL_TEXT
 
     return changed
+
+
+def snapshot_ws(ws) -> dict:
+    """워크시트 셀 값 스냅샷 반환 {(row, col): value}."""
+    return {
+        (cell.row, cell.column): cell.value
+        for row in ws.iter_rows()
+        for cell in row
+    }
+
+
+def highlight_reward_diffs(ws_new, src_snapshot: dict) -> list:
+    """
+    원본 참조 탭 스냅샷과 비교하여 보상 셀(E~I열)이 달라진 경우 연주황 하이라이트.
+    헤더 셀(짧지 않은 문자열)은 제외하고 실제 값(아이템명, 수량, 확률)만 대상으로 함.
+
+    반환: [(coord, original, new), ...]
+    """
+    hits = []
+    for row in ws_new.iter_rows():
+        for cell in row:
+            if cell.column not in REWARD_COLS:
+                continue
+            orig = src_snapshot.get((cell.row, cell.column))
+            new_val = cell.value
+            # 값이 같으면 건너뜀
+            if orig == new_val:
+                continue
+            # 둘 중 하나가 None이면 건너뜀 (빈 셀)
+            if orig is None or new_val is None:
+                continue
+            # datetime은 날짜 변경으로 이미 처리됨
+            if isinstance(new_val, (datetime, date)) or isinstance(orig, (datetime, date)):
+                continue
+            # 헤더 셀 제외: "보상 아이템", "보상 수량", "확률" 등 30자 이상 긴 문자열
+            if isinstance(new_val, str) and len(new_val) > 30:
+                continue
+            if isinstance(orig, str) and len(orig) > 30:
+                continue
+            # 보상 변경 하이라이트 적용
+            cell.fill = FILL_REWARD
+            hits.append((cell.coordinate, orig, new_val))
+    return hits
 
 
 def _safe_print(text: str) -> None:
@@ -371,6 +409,8 @@ def run_with_config(
         if src not in wb.sheetnames:
             raise ValueError(f"소스 탭 '{src}' 없음. 사용 가능: {wb.sheetnames}")
         ws = wb[src]
+        # 원본 스냅샷 저장 (보상 변경 비교 기준)
+        src_snap = snapshot_ws(ws)
         changes = apply_replacements(
             ws,
             cfg["replacements"],
@@ -378,6 +418,8 @@ def run_with_config(
             event_name_replacements=cfg.get("event_name_replacements"),
         )
         ws.title = new_tab
+        # 보상 셀 변경 하이라이트
+        highlight_reward_diffs(ws, src_snap)
         all_changes[new_tab] = changes
         all_season_warnings[new_tab] = warn_season_keywords(ws, new_tab)
 
@@ -514,16 +556,26 @@ def _cli_main(source: str, output: str, new_tabs: list, ref_tabs: list):
             continue
         # 소스 시트를 복사해서 새 이름으로 추가
         ws_src = wb[src]
+        # 원본 스냅샷 저장 (복사 전 — 보상 변경 비교 기준)
+        src_snap = snapshot_ws(ws_src)
+
         ws_new = wb.copy_worksheet(ws_src)
         ws_new.title = new_tab
 
         event_repls = enr.get(new_tab, [])
         changes = apply_replacements(
             ws_new,
-            cfg.get("replacements", []),   # 날짜·헤더 치환 (연초록)
+            cfg.get("replacements", []),
             date_map=cfg.get("date_map"),
-            event_name_replacements=event_repls,  # 이벤트 명칭 치환 (노랑)
+            event_name_replacements=event_repls,
         )
+        # 보상 셀 변경 하이라이트 (원본 대비 E~I열 값 차이)
+        reward_hits = highlight_reward_diffs(ws_new, src_snap)
+        if reward_hits:
+            print(f"  [{new_tab}] 보상 변경 셀 {len(reward_hits)}개 하이라이트:")
+            for coord, old, new in reward_hits:
+                print(f"    {coord}: '{old}' → '{new}'")
+
         all_changes[new_tab] = changes
         all_season_warnings[new_tab] = warn_season_keywords(ws_new, new_tab)
         print(f"  [{new_tab}] {src} 복사 완료, {len(changes)}개 셀 갱신")
