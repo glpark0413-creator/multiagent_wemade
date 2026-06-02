@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 from datetime import datetime, date
 import openpyxl
+from openpyxl.styles import PatternFill
 
 import sys as _sys_ct
 _sys_ct.path.insert(0, str(Path(__file__).resolve().parent))
@@ -41,6 +42,14 @@ OUTPUT_FILE_DIR = _paths_ct.file_dir if _paths_ct else Path("output") / "file"
 OUTPUT_JSON_DIR = _paths_ct.work_dir if _paths_ct else Path("output") / "json"
 OUTPUT_FILE = OUTPUT_FILE_DIR / "이벤트기획_260625_260702.xlsx"
 EVENT_NAMES_CONFIG = OUTPUT_JSON_DIR / "event_names_config.json"
+
+# ─── 변경 셀 하이라이트 색상 ────────────────────────────────────────────────
+# 이벤트 명칭 변경: 노랑
+FILL_EVENT_NAME = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
+# 날짜(datetime) 변경: 연파랑
+FILL_DATE       = PatternFill(start_color="BDD7EE", end_color="BDD7EE", fill_type="solid")
+# 기타 텍스트(날짜 문자열·헤더 등) 변경: 연초록
+FILL_TEXT       = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
 
 # 시즌·월 키워드: 이 단어가 포함된 셀은 수동 검토 권장
 SEASON_KEYWORDS = [
@@ -155,19 +164,24 @@ def load_event_names_config():
 
 def apply_replacements(ws, replacements, date_map=None, event_name_replacements=None):
     """
-    워크시트 전체 셀에 치환 적용.
-    - datetime/date 객체: date_map으로 직접 날짜 갱신 (마커 트릭 없이 안전하게 처리)
-    - str: replacements → event_name_replacements 순서로 적용
+    워크시트 전체 셀에 치환 적용 + 변경된 셀 하이라이트.
+    - datetime/date 객체: date_map으로 직접 날짜 갱신 → 연파랑 하이라이트
+    - str (이벤트 명칭): event_name_replacements → 노랑 하이라이트
+    - str (날짜·헤더 등): replacements + date_map → 연초록 하이라이트
     """
     changed = []
-    all_str_replacements = list(replacements) + list(event_name_replacements or [])
+    _event_repls = list(event_name_replacements or [])
+    _text_repls  = list(replacements)
+
+    # event_name_replacements 의 old 값 집합 (하이라이트 구분용)
+    _event_olds = {old for old, _ in _event_repls}
 
     for row in ws.iter_rows():
         for cell in row:
             if cell.value is None:
                 continue
 
-            # datetime / date 객체: date_map으로 직접 매핑
+            # ── datetime / date 객체: date_map으로 직접 매핑 ──────────────────
             if isinstance(cell.value, (datetime, date)):
                 if not date_map:
                     continue
@@ -185,27 +199,43 @@ def apply_replacements(ws, replacements, date_map=None, event_name_replacements=
                     new_date = date(year, month, day)
                 changed.append((cell.coordinate, str(old_date), str(new_date)))
                 cell.value = new_date
+                cell.fill  = FILL_DATE      # 날짜 변경: 연파랑
                 continue
 
             if not isinstance(cell.value, str):
                 continue
 
-            new_val = cell.value
-            for old, new in all_str_replacements:
+            original_val = cell.value
+            new_val      = cell.value
+            changed_by_event = False
+
+            # 1) 이벤트 명칭 치환 (노랑 하이라이트 대상)
+            for old, new in _event_repls:
+                if old in new_val:
+                    new_val = new_val.replace(old, new)
+                    changed_by_event = True
+
+            # 2) 날짜·헤더 등 일반 텍스트 치환
+            for old, new in _text_repls:
                 new_val = new_val.replace(old, new)
-            # date_map 을 문자열 셀에도 적용 — 단일 패스 regex 로 순서 충돌 방지
+
+            # 3) date_map 을 문자열 셀에도 적용 — 단일 패스 regex
             if date_map:
-                # 슬래시 형식 (06/11 → 06/25)
-                _slash_map = {k: v for k, v in date_map.items()}
+                _slash_map = dict(date_map)
                 _slash_pat = re.compile("|".join(re.escape(k) for k in sorted(_slash_map, key=len, reverse=True)))
                 new_val = _slash_pat.sub(lambda m: _slash_map[m.group(0)], new_val)
-                # 점 형식 (06.11 → 06.25) — 헤더 셀 등
                 _dot_map = {k.replace("/", "."): v.replace("/", ".") for k, v in date_map.items()}
                 _dot_pat = re.compile("|".join(re.escape(k) for k in sorted(_dot_map, key=len, reverse=True)))
                 new_val = _dot_pat.sub(lambda m: _dot_map[m.group(0)], new_val)
-            if new_val != cell.value:
-                changed.append((cell.coordinate, cell.value, new_val))
+
+            if new_val != original_val:
+                changed.append((cell.coordinate, original_val, new_val))
                 cell.value = new_val
+                # 변경 유형에 따라 하이라이트 색상 구분
+                if changed_by_event:
+                    cell.fill = FILL_EVENT_NAME   # 이벤트 명칭 변경: 노랑
+                else:
+                    cell.fill = FILL_TEXT         # 날짜·헤더 변경: 연초록
 
     return changed
 
@@ -487,12 +517,12 @@ def _cli_main(source: str, output: str, new_tabs: list, ref_tabs: list):
         ws_new = wb.copy_worksheet(ws_src)
         ws_new.title = new_tab
 
-        repls = enr.get(new_tab, [])
+        event_repls = enr.get(new_tab, [])
         changes = apply_replacements(
             ws_new,
-            repls,
+            cfg.get("replacements", []),   # 날짜·헤더 치환 (연초록)
             date_map=cfg.get("date_map"),
-            event_name_replacements=None,
+            event_name_replacements=event_repls,  # 이벤트 명칭 치환 (노랑)
         )
         all_changes[new_tab] = changes
         all_season_warnings[new_tab] = warn_season_keywords(ws_new, new_tab)
