@@ -304,62 +304,138 @@ def _find_prev_same_type_ws(wb, ref_tab: str, ref_pairs: list) -> tuple:
         tab_col_sigs = {(ic, qc) for _, ic, qc in tab_pairs}
 
         overlap = ref_col_sigs & tab_col_sigs
-        if len(overlap) >= 3:           # 3개 이상 겹쳐야 동일 타입 (2개는 우연의 일치)
+        if len(overlap) >= 3:           # 3개 이상 겹쳐야 동일 타입
             return tab, ws
 
     return None, None
 
 
-def apply_prev_type_rewards(ws_new, prev_ws) -> int:
+def _find_all_prev_same_type_ws(wb, ref_tab: str, ref_pairs: list) -> list:
     """
-    이전 동일 타입 탭의 보상 값을 새 탭에 실제로 적용한다.
-    섹션 헤더 기준 오프셋으로 정렬하므로 행 번호가 달라도 올바르게 매핑된다.
-
-    - ws_new : 새로 생성된 워크시트 (현재 참조 탭의 값이 들어있음)
-    - prev_ws: 이전 동일 타입 탭 (이 값으로 보상을 갱신)
-    - 반환: 실제로 변경된 셀 수
+    ref_tab 이전의 동일 타입 탭을 모두 찾아 [(탭명, ws), ...] 최신→구버전 순으로 반환.
     """
-    _SKIP = {"보상 아이템", "보상 수량", "확률", "획득 보상"}
-
-    new_pairs  = _find_reward_col_pairs(ws_new)
-    prev_pairs = _find_reward_col_pairs(prev_ws)
-
-    prev_header_map: dict[tuple, list[int]] = {}
-    for h, ic, qc in prev_pairs:
-        prev_header_map.setdefault((ic, qc), []).append(h)
-
-    count = 0
-    for new_h, ic, qc in new_pairs:
-        prev_headers = prev_header_map.get((ic, qc))
-        if not prev_headers:
+    import re as _re
+    date_tabs = sorted(
+        [s for s in wb.sheetnames if _re.fullmatch(r"\d{6}", s)],
+        reverse=True,
+    )
+    ref_col_sigs = {(ic, qc) for _, ic, qc in ref_pairs}
+    past_ref = False
+    result = []
+    for tab in date_tabs:
+        if tab == ref_tab:
+            past_ref = True
             continue
-        prev_h = prev_headers[0]
+        if not past_ref:
+            continue
+        ws = wb[tab]
+        tab_pairs = _find_reward_col_pairs(ws)
+        tab_col_sigs = {(ic, qc) for _, ic, qc in tab_pairs}
+        if len(ref_col_sigs & tab_col_sigs) >= 3:
+            result.append((tab, ws))
+    return result
+
+
+def apply_balanced_rewards(ws_new, history_list: list) -> int:
+    """
+    이전 동일 타입 탭들의 보상 패턴을 분석하여 균형 잡힌 보상을 새 탭에 적용.
+
+    history_list: [(탭명, worksheet), ...] 참조 탭 포함 최신→구버전 순
+      - 참조 탭(260611)을 첫 번째로 포함시켜 현재 수준을 기준점으로 삼는다
+      - 이전 탭(260514 등)을 이후에 포함시켜 역사적 패턴을 반영한다
+
+    계산 방식:
+      - 숫자(수량): 가중 평균 (최신 탭 가중치 높음)
+        예) [260611=500000(가중2), 260514=300000(가중1)] → 433333
+      - 아이템명: 가중 빈도 최고 항목 선택
+        예) 두 기간 모두 동일 → 유지 / 다르면 최신 항목 우선
+
+    반환: 변경된 보상 행 수
+    """
+    if not history_list:
+        return 0
+
+    _SKIP = {"보상 아이템", "보상 수량", "확률", "획득 보상"}
+    new_pairs = _find_reward_col_pairs(ws_new)
+    n = len(history_list)
+    count = 0
+
+    # 각 섹션의 (ic, qc) 기준 인덱스 미리 계산 (같은 열 쌍이 여러 섹션일 때 n번째 매핑)
+    col_pair_counter: dict[tuple, int] = {}
+
+    for new_h, ic, qc in new_pairs:
+        pair_key = (ic, qc)
+        section_idx = col_pair_counter.get(pair_key, 0)
+        col_pair_counter[pair_key] = section_idx + 1
+
+        # 각 이력 탭에서 n번째 동일 열 쌍 헤더 위치 찾기
+        section_refs: list[tuple] = []   # [(hist_ws, hist_header_row), ...]
+        for _tab, hist_ws in history_list:
+            hist_pairs = _find_reward_col_pairs(hist_ws)
+            matches = [ph for ph, pic, pqc in hist_pairs if (pic, pqc) == pair_key]
+            if section_idx < len(matches):
+                section_refs.append((hist_ws, matches[section_idx]))
+
+        if not section_refs:
+            continue
 
         offset = 1
         while True:
             new_iv = ws_new.cell(new_h + offset, ic).value
             if new_iv is None:
                 break
+            if new_iv in _SKIP:
+                offset += 1
+                continue
 
-            prev_iv = ws_new.cell(new_h + offset, ic).value   # 현재 값
-            prev_qv = ws_new.cell(new_h + offset, qc).value
+            new_qv = ws_new.cell(new_h + offset, qc).value
 
-            src_iv = prev_ws.cell(prev_h + offset, ic).value  # 이전 탭 값
-            src_qv = prev_ws.cell(prev_h + offset, qc).value
+            # 이력 탭들에서 값 수집 (최신→구버전, 가중치 n→1)
+            item_weights: dict[str, float] = {}
+            # 아이템별 수량 데이터 — 같은 아이템인 경우만 수량 평균 대상
+            item_qty: dict[str, list] = {}   # item → [(qty, weight), ...]
 
-            # 보상 아이템 적용
-            if (src_iv is not None and src_iv not in _SKIP
-                    and new_iv not in _SKIP
-                    and not isinstance(src_iv, (datetime, date))
-                    and src_iv != new_iv):
-                ws_new.cell(new_h + offset, ic).value = src_iv
-                count += 1
+            for rank, (hist_ws, hist_h) in enumerate(section_refs):
+                w = n - rank   # 첫 번째(최신)가 가장 높은 가중치
+                h_iv = hist_ws.cell(hist_h + offset, ic).value
+                h_qv = hist_ws.cell(hist_h + offset, qc).value
 
-            # 보상 수량 적용
-            if (src_qv is not None and src_qv not in _SKIP
-                    and not isinstance(src_qv, (datetime, date))
-                    and src_qv != prev_qv):
-                ws_new.cell(new_h + offset, qc).value = src_qv
+                if h_iv is not None and h_iv not in _SKIP and not isinstance(h_iv, (datetime, date)):
+                    item_weights[h_iv] = item_weights.get(h_iv, 0.0) + w
+                    if h_qv is not None and h_qv not in _SKIP:
+                        try:
+                            item_qty.setdefault(h_iv, []).append((float(h_qv), w))
+                        except (ValueError, TypeError):
+                            pass
+
+            row_changed = False
+
+            # 아이템명: 가중 빈도 최고 선택
+            best_item = max(item_weights, key=item_weights.get) if item_weights else None
+            if best_item and best_item != new_iv:
+                ws_new.cell(new_h + offset, ic).value = best_item
+                row_changed = True
+
+            # 수량: 같은 아이템의 수량들만 가중 평균
+            # (아이템이 다른 기간의 수량은 혼합하지 않음)
+            target_item = best_item or new_iv
+            if target_item and target_item in item_qty:
+                qty_list = item_qty[target_item]
+                qty_sum    = sum(q * w for q, w in qty_list)
+                qty_wt_sum = sum(w for _, w in qty_list)
+                if qty_wt_sum > 0:
+                    avg = qty_sum / qty_wt_sum
+                    if new_qv is None or isinstance(new_qv, int) or (
+                            isinstance(new_qv, float) and new_qv == int(new_qv)):
+                        avg = int(round(avg))
+                    else:
+                        avg = round(avg, 4)
+                    cur_qv = ws_new.cell(new_h + offset, qc).value
+                    if avg != cur_qv:
+                        ws_new.cell(new_h + offset, qc).value = avg
+                        row_changed = True
+
+            if row_changed:
                 count += 1
 
             offset += 1
@@ -548,10 +624,11 @@ def run_with_config(
             event_name_replacements=cfg.get("event_name_replacements"),
         )
         ws.title = new_tab
-        # 이전 동일 타입 탭 보상 적용 → 참조 대비 하이라이트
-        _, prev_ws = _find_prev_same_type_ws(wb, src, ref_pairs)
-        if prev_ws:
-            apply_prev_type_rewards(ws, prev_ws)
+        # 역사 패턴 분석 → 균형 보상 적용 → 참조 대비 하이라이트
+        prev_list = _find_all_prev_same_type_ws(wb, src, ref_pairs)
+        if prev_list:
+            history = [(src, ws)] + prev_list
+            apply_balanced_rewards(ws, history)
             highlight_reward_diffs(ws, ref_snap)
         all_changes[new_tab] = changes
         all_season_warnings[new_tab] = warn_season_keywords(ws, new_tab)
@@ -701,23 +778,27 @@ def _cli_main(source: str, output: str, new_tabs: list, ref_tabs: list):
             event_name_replacements=event_repls,
         )
 
-        # ── 보상 처리: 이전 동일 타입 탭 보상을 실제로 적용 후 참조 대비 하이라이트
-        ref_pairs = _find_reward_col_pairs(ws_src)
-        ref_snap  = snapshot_ws(ws_src)   # 참조 탭(260611) 스냅샷 — 하이라이트 기준
-        prev_tab, prev_ws = _find_prev_same_type_ws(wb, src, ref_pairs)
+        # ── 보상 처리: 역사 패턴 분석 → 균형 보상 적용 → 참조 대비 하이라이트 ───
+        ref_pairs  = _find_reward_col_pairs(ws_src)
+        ref_snap   = snapshot_ws(ws_src)   # 참조 탭(260611) 스냅샷 — 하이라이트 기준
+        prev_list  = _find_all_prev_same_type_ws(wb, src, ref_pairs)  # [(탭,ws), ...]
 
-        if prev_ws:
-            # 1) 이전 동일 타입 탭(260514) 보상값을 새 탭에 실제로 적용
-            applied = apply_prev_type_rewards(ws_new, prev_ws)
-            print(f"  [{new_tab}] 이전 동일 타입 탭 '{prev_tab}' 보상 적용: {applied}개 셀")
-            # 2) 적용 후 참조 탭(260611) 대비 달라진 보상 셀만 하이라이트
+        if prev_list:
+            # 참조 탭을 첫 번째로 포함 → 현재 수준을 기준점으로 가중 평균 계산
+            history = [(src, ws_src)] + prev_list
+            tab_names = [src] + [t for t, _ in prev_list]
+            applied = apply_balanced_rewards(ws_new, history)
+            print(f"  [{new_tab}] 보상 패턴 분석: {tab_names} → 균형 조정 {applied}개 행")
+            # 적용 후 참조 탭(260611) 대비 달라진 보상 셀만 하이라이트
             reward_hits = highlight_reward_diffs(ws_new, ref_snap)
             if reward_hits:
                 print(f"  [{new_tab}] 보상 변경 셀 {len(reward_hits)}개 하이라이트 (vs {src}):")
-                for coord, old, new_v in reward_hits:
+                for coord, old, new_v in reward_hits[:10]:
                     print(f"    {coord}: '{old}' → '{new_v}'")
+                if len(reward_hits) > 10:
+                    print(f"    ... 외 {len(reward_hits)-10}개")
         else:
-            print(f"  [{new_tab}] 이전 동일 타입 탭 없음 → 보상 비교 생략")
+            print(f"  [{new_tab}] 이전 동일 타입 탭 없음 → 보상 변경 생략")
 
         all_changes[new_tab] = changes
         all_season_warnings[new_tab] = warn_season_keywords(ws_new, new_tab)
