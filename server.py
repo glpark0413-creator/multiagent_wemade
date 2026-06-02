@@ -442,300 +442,254 @@ def agent_chat():
     return jsonify(job_id=job_id)
 
 
-def _event_planner_agent(user_msg: str, history: list, context: dict, q: _queue_module.Queue):
-    """이벤트 기획 에이전트 — 장르·키워드·참조탭 수집 후 파이프라인 실행."""
-    if not HAS_AI:
-        q.put({"type": "error", "message": "AI가 설정되지 않았습니다."})
-        q.put({"type": "done", "status": "error"})
-        return
+# ═══════════════════════════════════════════════════════════════════════════════
+# 이벤트 기획 에이전트 — 상태 머신 헬퍼 (LLM 의존 없음, 완전 오프라인)
+# ═══════════════════════════════════════════════════════════════════════════════
 
-    # 소스 파일에서 기존 날짜 탭 목록 추출 (참조 탭 안내용)
-    available_tabs: list[str] = []
+import re as _re_agent
+
+_GENRE_DETECT = {
+    "야구":   ["야구", "baseball", "kbo", "프로야구"],
+    "축구":   ["축구", "soccer", "football", "k리그"],
+    "농구":   ["농구", "basketball", "kbl"],
+    "MMORPG": ["mmorpg", "rpg", "역할", "레이드", "던전"],
+    "캐주얼": ["캐주얼", "퍼즐", "puzzle", "casual"],
+    "스포츠": ["스포츠", "sport"],
+}
+
+_GENRE_KW_POOL = {
+    "야구":   ["올스타", "전반기 결산", "순위 경쟁", "우승 도전", "끝내기 홈런",
+               "퍼펙트게임", "레전드", "드래프트", "명예의 전당", "한국시리즈",
+               "홈런왕", "타격왕", "방어율왕", "신인왕", "MVP"],
+    "축구":   ["이적 시장", "챔피언스리그", "리그 개막", "국가대표", "유망주",
+               "골든부트", "베스트 11", "FA", "주전 경쟁", "포메이션",
+               "스쿼드", "이적료", "월드컵", "드리블왕", "감독"],
+    "MMORPG": ["신규 클래스", "업데이트", "레이드", "보스", "던전",
+               "장비 강화", "길드전", "시즌 패스", "영웅 성장", "전설 아이템",
+               "서버 이전", "한정 코스튬", "공성전", "월드보스", "신규 직업"],
+    "캐주얼": ["신규 스테이지", "업데이트", "협동 이벤트", "친구 초대", "랭킹전",
+               "한정 스킨", "콜라보", "시즌 챌린지", "출석 보너스", "미션"],
+    "스포츠": ["시즌 개막", "결승전", "우승", "베스트 선수", "특별 스쿼드",
+               "한정 강화", "챔피언십", "올스타", "시즌 결산", "신규 선수"],
+}
+
+_SEASON_KW_POOL = {
+    "1":  ["신년", "새해 맞이", "새 출발", "겨울 대전", "설날 준비"],
+    "2":  ["발렌타인", "겨울 마무리", "봄 예고", "화이트데이 예고", "설날"],
+    "3":  ["봄 개막", "개막전", "새 시즌 시작", "벚꽃", "새봄 챌린지"],
+    "4":  ["봄 절정", "황금연휴 예고", "벚꽃 만개", "4월의 기적", "봄 대전"],
+    "5":  ["황금연휴", "어린이날", "가정의 달", "봄 마무리", "전반기 중반"],
+    "6":  ["초여름", "전반기 결산", "여름 예고", "얼리썸머", "6월의 열기"],
+    "7":  ["여름 대축제", "한여름의 열기", "전반기 마무리", "올스타 시즌", "피서 특별 이벤트"],
+    "8":  ["한여름 절정", "여름 마무리", "휴가 시즌", "후반기 개막", "8월의 열정"],
+    "9":  ["가을 개막", "추석", "한가위", "포스트시즌 진입", "시즌 막바지"],
+    "10": ["포스트시즌", "핼러윈", "가을 절정", "시즌 결산", "10월의 드라마"],
+    "11": ["시즌 종료", "겨울 예고", "연말 준비", "드래프트 시즌", "FA 시장"],
+    "12": ["크리스마스", "연말 결산", "올해의 선수", "새해 예고", "겨울 대축제"],
+}
+
+def _detect_genre(text: str) -> str:
+    tl = text.lower().replace(" ", "")
+    for genre, kws in _GENRE_DETECT.items():
+        if any(kw.replace(" ", "") in tl for kw in kws):
+            return genre
+    return ""
+
+def _build_keyword_suggestion(genre: str, target_month: str) -> tuple:
+    """장르·시즌 키워드 메시지 생성 (LLM 불필요)"""
+    genre_kws = _GENRE_KW_POOL.get(genre, _GENRE_KW_POOL.get("스포츠", []))
+    try:
+        month_str = str(int(target_month.split("-")[1]))
+    except Exception:
+        month_str = str(datetime.now().month)
+    season_kws = _SEASON_KW_POOL.get(month_str, [])
+    all_kws = genre_kws + season_kws
+
+    lines = [f"**{genre}** 장르 이벤트에 활용할 키워드를 제안합니다.\n"]
+    lines.append(f"📌 **[{genre}] 장르 키워드**")
+    for i, kw in enumerate(genre_kws, 1):
+        lines.append(f"{i}. {kw}")
+    lines.append(f"\n🗓️ **시즌 키워드** ({target_month} 기준)")
+    for i, kw in enumerate(season_kws, 1):
+        lines.append(f"{i}. {kw}")
+    lines.append("\n사용할 키워드를 선택하거나 **'모두 사용'** 이라고 해주세요.\n번호 선택도 가능합니다. (예: 1,3,5,11,12)")
+    return all_kws, "\n".join(lines)
+
+def _parse_keyword_selection(user_msg: str, suggested: list) -> list:
+    if any(w in user_msg for w in ["모두", "전부", "다 ", "다사용", "전체"]):
+        return suggested
+    nums = _re_agent.findall(r'\b(\d+)\b', user_msg)
+    if nums:
+        selected = []
+        for n in nums:
+            idx = int(n) - 1
+            if 0 <= idx < len(suggested):
+                selected.append(suggested[idx])
+        if selected:
+            return selected
+    # 키워드 이름 직접 포함
+    selected = [kw for kw in suggested if kw in user_msg]
+    return selected if selected else suggested
+
+def _parse_ref_tabs(user_msg: str, new_tabs: list, available_tabs: list) -> list:
+    # 방법 1: 화살표 패턴
+    pairs = _re_agent.findall(r'(\d{6})\s*[→\->]\s*(\d{6})', user_msg)
+    if pairs:
+        return [p[1] for p in pairs[:len(new_tabs)]]
+    # 방법 2: 한국어 패턴 "260625는 260618을 참조"
+    kr = _re_agent.findall(r'(\d{6})[은는이가]?\s*(\d{6})[을를]?\s*참조', user_msg)
+    if kr:
+        return [p[1] for p in kr[:len(new_tabs)]]
+    # 방법 3: new_tab 직후 6자리 숫자
+    result = []
+    for nt in new_tabs:
+        idx = user_msg.find(nt)
+        if idx >= 0:
+            m = _re_agent.search(r'\b(\d{6})\b', user_msg[idx + len(nt):])
+            if m:
+                result.append(m.group(1))
+    if len(result) == len(new_tabs):
+        return result
+    # 방법 4: new_tabs 제외한 모든 6자리 숫자
+    all_nums = [n for n in _re_agent.findall(r'\b(\d{6})\b', user_msg) if n not in new_tabs]
+    if all_nums:
+        while len(all_nums) < len(new_tabs):
+            all_nums.append(all_nums[-1])
+        return all_nums[:len(new_tabs)]
+    return []
+
+def _auto_ref_tabs(new_tabs: list, available_tabs: list) -> list:
+    """new_tabs 직전에 가장 가까운 탭을 자동 매핑"""
+    result = []
+    for nt in new_tabs:
+        best = available_tabs[0] if available_tabs else nt
+        try:
+            nd = datetime(2000 + int(nt[:2]), int(nt[2:4]), int(nt[4:6]))
+            candidates = []
+            for at in available_tabs:
+                try:
+                    ad = datetime(2000 + int(at[:2]), int(at[2:4]), int(at[4:6]))
+                    if ad < nd:
+                        candidates.append((ad, at))
+                except Exception:
+                    pass
+            if candidates:
+                best = sorted(candidates, reverse=True)[0][1]
+        except Exception:
+            pass
+        result.append(best)
+    return result
+
+
+def _event_planner_agent(user_msg: str, history: list, context: dict, q: _queue_module.Queue):
+    """이벤트 기획 에이전트 — 서버 상태 머신 기반 (LLM 불필요, 완전 오프라인)"""
+
+    # ── 소스 파일에서 available_tabs 추출 ─────────────────────────────────
+    available_tabs: list = []
     source = context.get("source_path", "")
     if source and Path(source).exists():
         try:
-            import openpyxl as _xl, re as _re
+            import openpyxl as _xl
             wb = _xl.load_workbook(source, read_only=True)
             available_tabs = sorted(
-                [s for s in wb.sheetnames if _re.match(r'^\d{6}$', s)],
+                [s for s in wb.sheetnames if _re_agent.match(r'^\d{6}$', s)],
                 reverse=True
-            )[:10]   # 최근 10개만
+            )[:10]
             wb.close()
         except Exception:
             pass
 
-    # 학습 인사이트 주입
-    _learn_hint = ""
-    if _LEARNING:
-        try:
-            _insights = _LEARNING.get_insights(genre=context.get("genre",""), agent="event-planner")
-            if _insights.get("suggested_keywords"):
-                _learn_hint += f"\n[학습된 키워드 추천 - {context.get('genre','')} 장르: {', '.join(_insights['suggested_keywords'][:15])}]"
-            if _insights.get("recent_improvements"):
-                _learn_hint += f"\n[최근 개선 제안: {'; '.join(_insights['recent_improvements'][:2])}]"
-        except Exception:
-            pass
-
-    # 오늘 날짜 및 대상 월 계산
-    _today = datetime.now().strftime("%Y-%m-%d")
-    _new_tabs = context.get("new_tabs", [])
-    if _new_tabs:
-        try:
-            _target_month = datetime.strptime("20" + _new_tabs[0], "%Y%m%d").strftime("%Y-%m")
-        except Exception:
-            _target_month = context.get("target_month", datetime.now().strftime("%Y-%m"))
-    else:
-        _target_month = context.get("target_month", datetime.now().strftime("%Y-%m"))
-
-    # 시스템 프롬프트에 실제 값 주입
-    system = EVENT_PLANNER_AGENT_SYSTEM.replace(
-        "{context_json}", json.dumps(context, ensure_ascii=False)
-    ).replace(
-        "{available_tabs}", str(available_tabs) if available_tabs else "확인 불가 (소스 파일 없음)"
-    ).replace(
-        "{today}", _today
-    ).replace(
-        "{target_month}", _target_month
-    )
-    if _learn_hint:
-        system = system + "\n\n## 누적 학습 인사이트" + _learn_hint
-
-    # 자동 시작 트리거 처리 — 사용자가 아직 아무 말도 안 한 상태에서 에이전트 첫 질문 유도
-    if user_msg == '__agent_start__':
-        user_msg = '안녕하세요. 필요한 정보를 단계적으로 질문해 주세요. 현재 보유 정보를 확인하고 없는 항목부터 바로 질문해 주세요.'
-
-    messages = history + [{"role": "user", "content": user_msg}]
-
-    # ★ 언어 강제 지시 — 마지막 user 메시지에 주입 (API 호출 전용 복사본)
-    _lang_suffix = (
-        "\n\n[CRITICAL LANGUAGE RULE] "
-        "response 필드는 반드시 한국어(Korean)로만 작성할 것. "
-        "중국어(Chinese)·일본어(Japanese)·영어(English) 사용 절대 금지. "
-        "JSON의 모든 텍스트 값은 한국어만 허용."
-    )
-    api_messages = messages[:-1] + [{
-        "role": messages[-1]["role"],
-        "content": messages[-1]["content"] + _lang_suffix
-    }]
-
-    # AI 호출
+    new_tabs = context.get("new_tabs", [])
     try:
-        if AI_MODE == "ollama":
-            resp = _AI.chat.completions.create(
-                model=OLLAMA_MODEL,
-                messages=[{"role": "system", "content": system}] + api_messages,
-                temperature=0.2,
-            )
-            raw = resp.choices[0].message.content.strip()
-        else:
-            resp = _ANTHROPIC.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=1024,
-                system=system,
-                messages=api_messages,
-            )
-            raw = resp.content[0].text.strip()
-    except Exception as e:
-        q.put({"type": "error", "message": f"AI 호출 실패: {e}"})
-        q.put({"type": "done", "status": "error"})
-        return
+        target_month = datetime.strptime("20" + new_tabs[0], "%Y%m%d").strftime("%Y-%m") if new_tabs else datetime.now().strftime("%Y-%m")
+    except Exception:
+        target_month = datetime.now().strftime("%Y-%m")
 
-    # ── JSON 파싱 ────────────────────────────────────────────────────────────
-    import re as _re_json
+    step = context.get("_agent_step", "start")
 
-    def _repair_json(s: str) -> str:
-        """소형 모델이 자주 만드는 JSON 오류 수정"""
-        # 1) 쌍따옴표 값 뒤에 쉼표 없이 다음 키가 오는 경우: "..." "key" → "...", "key"
-        s = _re_json.sub(r'(")\s*\n?\s*(")', r'\1,\n\2', s)
-        # 2) 값 뒤에 쉼표 없이 닫는 괄호: "val" } → "val"}  (OK) — 이건 괜찮으므로 skip
-        # 3) 중국어/유니코드로 시작하는 response 값 처리 — 그대로 유지 (내용은 후처리)
-        return s
-
-    result = None
-    cleaned = raw
-    if "```" in cleaned:
-        part = cleaned.split("```")[1]
-        cleaned = part[4:] if part.startswith("json") else part
-    cleaned = cleaned.strip()
-
-    decoder = json.JSONDecoder()
-    # 1차 파싱 시도
-    for i, ch in enumerate(cleaned):
-        if ch == '{':
-            try:
-                result, _ = decoder.raw_decode(cleaned, i)
-                break
-            except json.JSONDecodeError:
-                continue
-
-    # 2차: JSON 수리 후 재시도
-    if result is None:
-        repaired = _repair_json(cleaned)
-        for i, ch in enumerate(repaired):
-            if ch == '{':
-                try:
-                    result, _ = json.JSONDecoder().raw_decode(repaired, i)
-                    break
-                except json.JSONDecodeError:
-                    continue
-
-    # 3차: 파싱 완전 실패 → response 필드만 regex로 추출 (raw JSON 노출 방지)
-    if result is None:
-        _m = _re_json.search(r'"response"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
-        _fallback_msg = _m.group(1).replace('\\n', '\n') if _m else ""
-        if not _fallback_msg:
-            # response 필드도 없으면 중국어 여부 확인 후 처리
-            _is_chinese = bool(_re_json.search(r'[一-鿿]', raw))
-            _fallback_msg = "응답을 처리하는 중 오류가 발생했습니다. 다시 시도해 주세요." if _is_chinese else raw[:300]
-        q.put({"type": "message", "content": _fallback_msg})
+    def _done(msg: str = ""):
+        if msg:
+            q.put({"type": "message", "content": msg})
+        q.put({"type": "context_update", "context": context})
         q.put({"type": "done", "status": "chat"})
+
+    # ── START: 에이전트 시작 ───────────────────────────────────────────────
+    if user_msg == "__agent_start__" or step == "start":
+        context["_agent_step"] = "wait_genre"
+        existing = context.get("genre", "")
+        if existing:
+            _done(f"장르가 **{existing}**로 설정되어 있습니다. 이대로 진행할까요? (예/아니오)")
+        else:
+            _done("어떤 장르의 게임인가요?\n(예: 야구, 축구, MMORPG, 캐주얼, 퍼즐)")
         return
 
-    agent_resp = result.get("response", "")
-    updates    = result.get("updates", {}) or {}
+    # ── STEP 1: 장르 수집 ──────────────────────────────────────────────────
+    if step == "wait_genre":
+        existing = context.get("genre", "")
+        if existing and any(w in user_msg for w in ["예", "네", "맞", "ok", "OK", "yes", "그래", "ㅇㅇ"]):
+            genre = existing
+        else:
+            genre = _detect_genre(user_msg) or existing
+        if not genre:
+            _done("장르를 인식하지 못했습니다. 다시 알려주세요.\n(예: 야구, 축구, MMORPG, 캐주얼, 퍼즐)")
+            return
+        context["genre"] = genre
+        context["_agent_step"] = "wait_keywords"
+        all_kws, kw_msg = _build_keyword_suggestion(genre, target_month)
+        context["_suggested_keywords"] = all_kws
+        _done(kw_msg)
+        return
 
-    # ── AI가 updates 없이 top-level에 직접 필드를 넣는 경우 처리 ───────────
-    # 예: {"response":"...", "ref_tabs": [...], "pipeline_ready": false}
-    for _field in ("genre", "keywords", "ref_tabs", "market", "new_tabs"):
-        if _field in result and _field not in updates:
-            updates[_field] = result[_field]
-
-    # ── response가 중국어/일본어인 경우 언어 후처리 ──────────────────────────
-    _has_chinese = bool(_re_json.search(r'[一-鿿]', agent_resp))
-    _has_japanese = bool(_re_json.search(r'[぀-ヿㇰ-ㇿ]', agent_resp))
-    if _has_chinese or _has_japanese:
-        # 중국어·일본어 response는 버리고 서버사이드 메시지로 대체
-        agent_resp = ""
-
-    # updates를 context에 병합 (프론트엔드에 전달해 다음 턴에 사용)
-    merged_context = {**context, **updates}
-
-    _ai_pipeline_ready = result.get("pipeline_ready", False)
-    _prev_genre    = context.get("genre", "")
-    _prev_keywords = context.get("keywords", [])
-    _cur_genre     = merged_context.get("genre", "")
-    _cur_keywords  = merged_context.get("keywords", [])
-    _cur_ref_tabs  = merged_context.get("ref_tabs", [])
-    _cur_new_tabs  = merged_context.get("new_tabs", [])
-
-    # ── 서버사이드 STEP 전환 강제 보정 ──────────────────────────────────────
-    # AI가 response를 비워두거나, keywords 확인 후 STEP 3으로 넘어가지 않는 문제 방지
-
-    def _make_step3_msg():
-        """STEP 3: ref_tabs 질문 메시지 생성"""
-        _tabs_str = ", ".join(_cur_new_tabs) if _cur_new_tabs else "(없음)"
-        _avail_str = ", ".join(available_tabs[:10]) if available_tabs else "확인 불가"
-        _msg = (
-            f"키워드가 저장됐습니다! 이제 각 탭의 **참조 탭**을 알려주세요.\n\n"
-            f"📅 생성할 탭: {_tabs_str}\n"
-            f"📂 사용 가능한 탭: {_avail_str}"
+    # ── STEP 2: 키워드 수집 ────────────────────────────────────────────────
+    if step == "wait_keywords":
+        suggested = context.get("_suggested_keywords", [])
+        keywords = _parse_keyword_selection(user_msg, suggested)
+        context["keywords"] = keywords
+        context["_agent_step"] = "wait_ref_tabs"
+        kw_preview = ", ".join(keywords[:5]) + ("..." if len(keywords) > 5 else "")
+        tabs_str  = ", ".join(new_tabs) if new_tabs else "(없음)"
+        avail_str = ", ".join(available_tabs[:10]) if available_tabs else "확인 불가"
+        msg = (
+            f"**{len(keywords)}개** 키워드가 저장됐습니다 ({kw_preview})\n\n"
+            f"이제 각 탭의 **참조 탭**을 알려주세요.\n\n"
+            f"📅 생성할 탭: {tabs_str}\n"
+            f"📂 사용 가능한 탭: {avail_str}"
         )
-        if _cur_new_tabs and available_tabs:
-            _msg += f"\n\n예시: {_cur_new_tabs[0]}→{available_tabs[0]}"
-            if len(_cur_new_tabs) > 1 and len(available_tabs) > 1:
-                _msg += f", {_cur_new_tabs[1]}→{available_tabs[1]}"
-        return _msg
+        if new_tabs and available_tabs:
+            msg += f"\n\n예시: {new_tabs[0]}→{available_tabs[0]}"
+            if len(new_tabs) > 1:
+                msg += f", {new_tabs[1]}→{available_tabs[min(1, len(available_tabs)-1)]}"
+        _done(msg)
+        return
 
-    # Case A: keywords가 방금 추가됐는데 ref_tabs 없음 → STEP 3 질문 강제 추가
-    _kw_just_added = (not _prev_keywords) and bool(_cur_keywords)
-    if _kw_just_added and not _cur_ref_tabs and not _ai_pipeline_ready:
-        _s3 = _make_step3_msg()
-        agent_resp = (agent_resp.rstrip() + "\n\n" + _s3) if agent_resp else _s3
+    # ── STEP 3: 참조 탭 수집 → 파이프라인 실행 ─────────────────────────────
+    if step == "wait_ref_tabs":
+        ref_tabs = _parse_ref_tabs(user_msg, new_tabs, available_tabs)
 
-    # Case B: response가 비어있는 경우 단계에 맞는 자동 메시지 생성
-    elif not agent_resp and not _ai_pipeline_ready:
-        if not _cur_genre:
-            agent_resp = "어떤 장르의 게임인가요? (예: 야구, 축구, MMORPG, 캐주얼, 퍼즐)"
-        elif not _cur_keywords:
-            # genre 방금 설정됨 → AI에게 재요청해서 키워드 목록 가져오기
-            agent_resp = (
-                f"**{_cur_genre}** 장르로 설정됐습니다.\n\n"
-                f"다음으로, 이벤트에 사용할 키워드를 추천해 드리겠습니다.\n"
-                f"원하는 키워드를 선택하거나 추가로 요청해 주세요."
+        # "작업해줘" 등 트리거 + 파싱 실패 → 자동 매핑
+        _triggers = ("작업", "시작", "진행", "실행", "만들어", "생성", "해줘", "해봐", "확인", "맞아", "정확해", "ㅇㅇ")
+        if not ref_tabs and any(w in user_msg for w in _triggers) and available_tabs:
+            ref_tabs = _auto_ref_tabs(new_tabs, available_tabs)
+
+        if not ref_tabs:
+            avail_str = ", ".join(available_tabs[:10]) if available_tabs else "확인 불가"
+            _done(
+                f"참조 탭을 인식하지 못했습니다. 다시 알려주세요.\n\n"
+                f"📅 생성할 탭: {', '.join(new_tabs)}\n"
+                f"📂 사용 가능한 탭: {avail_str}\n\n"
+                f"예시: {new_tabs[0] if new_tabs else 'YYMMDD'}→{available_tabs[0] if available_tabs else 'YYMMDD'}"
             )
-        elif not _cur_ref_tabs:
-            agent_resp = _make_step3_msg()
-        else:
-            agent_resp = "정보를 수집했습니다. 잠시만 기다려 주세요."
+            return
 
-    # Case C: ref_tabs가 파싱 안 된 경우 서버사이드 자연어 파싱
-    # 사용자가 "260625는 260611을 참조하고, 260702는 260618을 참조해" 같은 자연어로 답한 경우
-    if not _cur_ref_tabs and _cur_new_tabs and not _kw_just_added and not _ai_pipeline_ready:
-        _search_text = user_msg  # user 메시지에서 탭 번호 추출
-        _all_6digit = _re_json.findall(r'\b(\d{6})\b', _search_text)
+        context["ref_tabs"] = ref_tabs
+        context["_agent_step"] = "done"
+        q.put({"type": "context_update", "context": context})
+        q.put({"type": "message", "content": "모든 정보가 준비됐습니다! 이벤트 기획 파이프라인을 시작합니다. 🚀"})
+        _run_event_pipeline(context, q)
+        return
 
-        # 방법 1: "YYMMDD → YYMMDD" 화살표 패턴
-        _arrow_pairs = _re_json.findall(r'(\d{6})\s*[→\->]\s*(\d{6})', _search_text)
-
-        # 방법 2: "YYMMDD는/은 YYMMDD를/을 참조" 한국어 패턴
-        _kr_pairs = _re_json.findall(r'(\d{6})[은는]\s*(\d{6})[을를]?\s*참조', _search_text)
-
-        # 방법 3: new_tab 뒤에 오는 첫 번째 6자리 숫자 (순서 기반)
-        _parsed_refs = []
-        if _arrow_pairs:
-            _parsed_refs = [p[1] for p in _arrow_pairs[:len(_cur_new_tabs)]]
-        elif _kr_pairs:
-            _parsed_refs = [p[1] for p in _kr_pairs[:len(_cur_new_tabs)]]
-        else:
-            # new_tab 각각에 대해 텍스트에서 다음에 나오는 6자리 숫자 찾기
-            for _nt in _cur_new_tabs:
-                _idx = _search_text.find(_nt)
-                if _idx >= 0:
-                    _after = _search_text[_idx + len(_nt):]
-                    _m = _re_json.search(r'\b(\d{6})\b', _after)
-                    if _m:
-                        _parsed_refs.append(_m.group(1))
-
-        if len(_parsed_refs) == len(_cur_new_tabs):
-            merged_context["ref_tabs"] = _parsed_refs
-            _cur_ref_tabs = _parsed_refs
-
-    if agent_resp:
-        q.put({"type": "message", "content": agent_resp})
-
-    # 서버사이드 완료 조건 검증 — AI가 pipeline_ready를 놓쳐도 자동 트리거
-    ai_ready     = _ai_pipeline_ready
-    # Case C 이후 _cur_ref_tabs가 업데이트됐을 수 있으므로 재평가
-    server_ready = bool(_cur_genre and _cur_keywords and _cur_ref_tabs)
-
-    # ── 파이프라인 명시적 트리거 감지 ───────────────────────────────────────
-    # 사용자가 "작업해줘", "시작해", "진행해줘" 등을 입력했고 필수 정보가 있으면 즉시 실행
-    _TRIGGER_WORDS = ("작업", "시작", "진행", "실행", "만들어", "생성해", "해줘", "해봐")
-    _user_wants_start = any(w in user_msg for w in _TRIGGER_WORDS)
-    if _user_wants_start and _cur_genre and _cur_keywords and not server_ready:
-        # ref_tabs가 없으면 available_tabs에서 자동 매핑 (new_tabs 직전 탭 사용)
-        if not _cur_ref_tabs and _cur_new_tabs and available_tabs:
-            _auto_refs = []
-            for _nt in _cur_new_tabs:
-                _best = _nt  # fallback: 자기 자신
-                try:
-                    _nd = datetime(2000 + int(_nt[:2]), int(_nt[2:4]), int(_nt[4:6]))
-                    _candidates = []
-                    for _at in available_tabs:
-                        try:
-                            _ad = datetime(2000 + int(_at[:2]), int(_at[2:4]), int(_at[4:6]))
-                            if _ad < _nd:
-                                _candidates.append((_ad, _at))
-                        except Exception:
-                            pass
-                    if _candidates:
-                        _best = sorted(_candidates, reverse=True)[0][1]
-                except Exception:
-                    pass
-                _auto_refs.append(_best)
-            merged_context["ref_tabs"] = _auto_refs
-            _cur_ref_tabs = _auto_refs
-            server_ready = True
-
-    if ai_ready or server_ready:
-        if server_ready and not ai_ready:
-            q.put({"type": "message", "content": "모든 정보가 준비됐습니다. 파이프라인을 시작합니다."})
-        q.put({"type": "context_update", "context": merged_context})
-        _run_event_pipeline(merged_context, q)
-    else:
-        # 대화 계속 — 업데이트된 컨텍스트 프론트엔드에 전달
-        q.put({"type": "context_update", "context": merged_context})
-        q.put({"type": "done", "status": "chat"})
+    # ── 완료 후 추가 입력 ──────────────────────────────────────────────────
+    _done("파이프라인이 이미 실행됐습니다. 새 이벤트 기획을 원하시면 PM에게 다시 요청해 주세요.")
 
 
 # ── 이벤트 기획 전체 파이프라인 ───────────────────────────────────────────────
