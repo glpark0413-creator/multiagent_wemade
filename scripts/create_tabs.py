@@ -338,109 +338,109 @@ def _find_all_prev_same_type_ws(wb, ref_tab: str, ref_pairs: list) -> list:
 
 def apply_balanced_rewards(ws_new, history_list: list) -> int:
     """
-    이전 동일 타입 탭들의 보상 패턴을 분석하여 균형 잡힌 보상을 새 탭에 적용.
+    역사적 보상 패턴을 기반으로 새 탭 보상을 업데이트한다.
 
-    history_list: [(탭명, worksheet), ...] 참조 탭 포함 최신→구버전 순
-      - 참조 탭(260611)을 첫 번째로 포함시켜 현재 수준을 기준점으로 삼는다
-      - 이전 탭(260514 등)을 이후에 포함시켜 역사적 패턴을 반영한다
+    history_list: [(탭명, worksheet), ...] 참조 탭(최신) + 이전 탭들 순서
+      예) [("260611", ws_611), ("260514", ws_514)]
 
-    계산 방식:
-      - 숫자(수량): 가중 평균 (최신 탭 가중치 높음)
-        예) [260611=500000(가중2), 260514=300000(가중1)] → 433333
-      - 아이템명: 가중 빈도 최고 항목 선택
-        예) 두 기간 모두 동일 → 유지 / 다르면 최신 항목 우선
+    동작 방식:
+      1. 아이템 교체: 참조 탭과 이전 탭의 아이템이 다른 슬롯 →
+         이전 탭 아이템으로 교체 (역사적 다양성 확보)
+      2. 수량 소폭 조정 (±5% 이내):
+         - 아이템이 교체된 슬롯 → 이전 탭의 수량 그대로 사용
+         - 아이템이 같은 슬롯   → 참조 수량에서 이전 수량 방향으로 5% 이동
 
-    반환: 변경된 보상 행 수
+    반환: 변경된 셀 수 (아이템 변경 + 수량 변경 합계)
     """
-    if not history_list:
+    if len(history_list) < 2:
         return 0
 
     _SKIP = {"보상 아이템", "보상 수량", "확률", "획득 보상"}
-    new_pairs = _find_reward_col_pairs(ws_new)
-    n = len(history_list)
-    count = 0
 
-    # 각 섹션의 (ic, qc) 기준 인덱스 미리 계산 (같은 열 쌍이 여러 섹션일 때 n번째 매핑)
+    _ref_name, ws_ref = history_list[0]   # 참조 탭 (260611)
+    _prv_name, ws_prv = history_list[1]   # 이전 동일 타입 탭 (260514)
+
+    new_pairs = _find_reward_col_pairs(ws_new)
+    prv_pairs = _find_reward_col_pairs(ws_prv)
+
+    # 이전 탭 섹션 매핑: (ic,qc) → [header_row, ...]
+    prv_hdr_map: dict[tuple, list[int]] = {}
+    for h, ic, qc in prv_pairs:
+        prv_hdr_map.setdefault((ic, qc), []).append(h)
+
     col_pair_counter: dict[tuple, int] = {}
+    item_changed = 0
+    qty_changed  = 0
 
     for new_h, ic, qc in new_pairs:
         pair_key = (ic, qc)
-        section_idx = col_pair_counter.get(pair_key, 0)
-        col_pair_counter[pair_key] = section_idx + 1
+        sec_idx  = col_pair_counter.get(pair_key, 0)
+        col_pair_counter[pair_key] = sec_idx + 1
 
-        # 각 이력 탭에서 n번째 동일 열 쌍 헤더 위치 찾기
-        section_refs: list[tuple] = []   # [(hist_ws, hist_header_row), ...]
-        for _tab, hist_ws in history_list:
-            hist_pairs = _find_reward_col_pairs(hist_ws)
-            matches = [ph for ph, pic, pqc in hist_pairs if (pic, pqc) == pair_key]
-            if section_idx < len(matches):
-                section_refs.append((hist_ws, matches[section_idx]))
-
-        if not section_refs:
+        prv_matches = prv_hdr_map.get(pair_key, [])
+        if sec_idx >= len(prv_matches):
             continue
+        prv_h = prv_matches[sec_idx]
 
         offset = 1
         while True:
-            new_iv = ws_new.cell(new_h + offset, ic).value
-            if new_iv is None:
+            cur_iv = ws_new.cell(new_h + offset, ic).value   # 현재 아이템 (= 참조 탭)
+            if cur_iv is None:
                 break
-            if new_iv in _SKIP:
+            if cur_iv in _SKIP:
                 offset += 1
                 continue
 
-            new_qv = ws_new.cell(new_h + offset, qc).value
+            cur_qv  = ws_new.cell(new_h + offset, qc).value  # 현재 수량 (= 참조 탭)
+            prv_iv  = ws_prv.cell(prv_h + offset, ic).value  # 이전 탭 아이템
+            prv_qv  = ws_prv.cell(prv_h + offset, qc).value  # 이전 탭 수량
 
-            # 이력 탭들에서 값 수집 (최신→구버전, 가중치 n→1)
-            item_weights: dict[str, float] = {}
-            # 아이템별 수량 데이터 — 같은 아이템인 경우만 수량 평균 대상
-            item_qty: dict[str, list] = {}   # item → [(qty, weight), ...]
+            if prv_iv is None or prv_iv in _SKIP or isinstance(prv_iv, (datetime, date)):
+                offset += 1
+                continue
 
-            for rank, (hist_ws, hist_h) in enumerate(section_refs):
-                w = n - rank   # 첫 번째(최신)가 가장 높은 가중치
-                h_iv = hist_ws.cell(hist_h + offset, ic).value
-                h_qv = hist_ws.cell(hist_h + offset, qc).value
+            # ── 아이템 교체 여부 결정 ─────────────────────────────────────────
+            if cur_iv != prv_iv:
+                # 아이템이 다름 → 이전 탭 아이템으로 교체
+                ws_new.cell(new_h + offset, ic).value = prv_iv
+                item_changed += 1
 
-                if h_iv is not None and h_iv not in _SKIP and not isinstance(h_iv, (datetime, date)):
-                    item_weights[h_iv] = item_weights.get(h_iv, 0.0) + w
-                    if h_qv is not None and h_qv not in _SKIP:
-                        try:
-                            item_qty.setdefault(h_iv, []).append((float(h_qv), w))
-                        except (ValueError, TypeError):
-                            pass
+                # 수량도 이전 탭 수량 사용
+                if prv_qv is not None and prv_qv not in _SKIP:
+                    ws_new.cell(new_h + offset, qc).value = prv_qv
+                    qty_changed += 1
 
-            row_changed = False
-
-            # 아이템명: 가중 빈도 최고 선택
-            best_item = max(item_weights, key=item_weights.get) if item_weights else None
-            if best_item and best_item != new_iv:
-                ws_new.cell(new_h + offset, ic).value = best_item
-                row_changed = True
-
-            # 수량: 같은 아이템의 수량들만 가중 평균
-            # (아이템이 다른 기간의 수량은 혼합하지 않음)
-            target_item = best_item or new_iv
-            if target_item and target_item in item_qty:
-                qty_list = item_qty[target_item]
-                qty_sum    = sum(q * w for q, w in qty_list)
-                qty_wt_sum = sum(w for _, w in qty_list)
-                if qty_wt_sum > 0:
-                    avg = qty_sum / qty_wt_sum
-                    if new_qv is None or isinstance(new_qv, int) or (
-                            isinstance(new_qv, float) and new_qv == int(new_qv)):
-                        avg = int(round(avg))
-                    else:
-                        avg = round(avg, 4)
-                    cur_qv = ws_new.cell(new_h + offset, qc).value
-                    if avg != cur_qv:
-                        ws_new.cell(new_h + offset, qc).value = avg
-                        row_changed = True
-
-            if row_changed:
-                count += 1
+            else:
+                # 아이템이 같음 → 수량을 이전 방향으로 5% 소폭 이동
+                if cur_qv is not None and prv_qv is not None and prv_qv not in _SKIP:
+                    try:
+                        ref_q = float(cur_qv)
+                        prv_q = float(prv_qv)
+                        diff  = prv_q - ref_q
+                        # 차이가 없으면 변경 불필요
+                        if abs(diff) < 1e-9:
+                            offset += 1
+                            continue
+                        # ref 기준 5% 이내로 소폭 이동
+                        step = ref_q * 0.05
+                        move = max(-step, min(step, diff * 0.5))
+                        new_q = ref_q + move
+                        # 원래 타입으로 반올림
+                        if isinstance(cur_qv, int) or (
+                                isinstance(cur_qv, float) and cur_qv == int(cur_qv)):
+                            new_q = int(round(new_q))
+                        else:
+                            new_q = round(new_q, 4)
+                        if new_q != cur_qv:
+                            ws_new.cell(new_h + offset, qc).value = new_q
+                            qty_changed += 1
+                    except (ValueError, TypeError):
+                        pass
 
             offset += 1
 
-    return count
+    print(f"    아이템 교체: {item_changed}개, 수량 조정: {qty_changed}개")
+    return item_changed + qty_changed
 
 
 def highlight_reward_diffs(ws_new, ref_snapshot: dict) -> list:
