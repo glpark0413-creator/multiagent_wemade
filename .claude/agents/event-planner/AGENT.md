@@ -35,52 +35,53 @@ PM이 전달하는 `output/handoff/event-planner_input.json`을 먼저 읽는다
 
 ## 실행 단계
 
-### 0단계 — 장르 선택 (genre가 null인 경우에만)
+### 0단계 — 장르 확인 (학습된 장르가 없는 경우에만)
 
-**Q1 — 장르 계열 선택** (AskUserQuestion):
-- 액션·슈팅 (핵앤슬래시 / FPS / TPS)
-- RPG·전략 (MMORPG / 턴제 / 전략 / RTS / MOBA / AOS)
-- 캐주얼 (시뮬레이션 / 어드벤처 / 퍼즐 / 리듬 / 로그라이크 / 덱빌딩)
-- 스포츠 (야구 / 축구 / 농구 / 기타 스포츠)
+> **[업데이트]** `output/config/agent_config.json`에 `default_genre`가 저장되어 있으면 장르 질문을 생략하고 바로 키워드 단계로 진행한다.
 
-**Q2 — 세부 장르 선택** (AskUserQuestion, 계열별 최대 4개):
+```json
+// output/config/agent_config.json
+{ "default_genre": "야구" }
+```
 
-| 계열 | 옵션 1 | 옵션 2 | 옵션 3 | 옵션 4 |
-|---|---|---|---|---|
-| 액션·슈팅 | 핵앤슬래시 | FPS | TPS | — |
-| RPG·전략 | MMORPG | 턴제 | 전략·RTS | MOBA·AOS |
-| 캐주얼 | 시뮬레이션·어드벤처 | 퍼즐 | 리듬 | 로그라이크·덱빌딩 |
-| 스포츠 | 야구 | 축구 | 농구 | 기타 스포츠 |
+장르가 저장되지 않은 경우에만 사용자에게 질문:
+- 예: 야구, 축구, MMORPG, 캐주얼, 퍼즐
+
+장르를 처음 입력하면 자동으로 `agent_config.json`에 저장된다 (다음 요청부터 질문 생략).
 
 ---
 
-### 0.5단계 — 이벤트 제목·내용 패턴 학습 및 키워드 확정
+### 0.5단계 — 키워드 생성 (LLM — Ollama JSON 강제 모드)
 
-> **[변경]** 웹서치 대신 기존 파일에서 이벤트 명칭과 내용 패턴을 직접 학습한다.
-> 기존 파일 학습으로 충분한 키워드가 추출되면 웹서치를 하지 않는다.
+> **[업데이트]** 웹서치 없이 LLM이 직접 키워드를 생성한다. Ollama JSON 강제 모드(`format: json`)를 사용해 파싱 오류를 방지한다.
 
-**스크립트 실행**:
-```bash
-python scripts/extract_event_names.py "{source_path}" \
-    --output output/event-planner/work/historical_event_names.json \
-    --summarize   # 전체 원문이 아닌 요약 통계만 출력 (토큰 절약)
+**LLM 호출 방식**:
+```python
+# Ollama JSON 강제 모드 — 유효한 JSON만 출력
+extra_body={"format": "json"}
 ```
 
-**LLM 수행** (historical_event_names.json 기반):
-- 이벤트 제목 구조 파악: `[시즌 키워드] + [행동 동사] + [보상/혜택 강조]`
-- 반복 등장 문구·형용사 클러스터링 (예: "대모험", "축제", "귀환")
-- 마켓별 선호 어투 차이 감지 (예: 일본 ↔ 한국 표현 차이)
-- 시즌별 제목 트렌드 추출 (연말, 골든위크, 여름 등)
+**프롬프트 구조**:
+- `genre_keywords`: 장르 게임 이벤트에 쓰이는 한국어 키워드 15개
+- `season_keywords`: 대상 월 시즌에 맞는 한국어 키워드 7개
 
-**키워드 풀 생성 우선순위**:
-1. 기존 파일 학습 결과 → `genre_phrases_learned` 로 저장
-2. 학습된 키워드 수 < 10개 → 웹서치 1회 보완 (최소화)
-3. 웹서치 결과와 학습 결과 병합
+**폴백 순서**:
+1. LLM 정상 응답 → 한국어 검증 후 사용 (중국어·일본어 자동 제거)
+2. LLM 실패 (JSON 오류, 키워드 3개 미만) → 하드코딩 풀 (`_GENRE_KW_POOL` + `_SEASON_KW_POOL`) 사용
 
-**요청자 확인** (Q3 — AskUserQuestion):
-- `학습된 패턴 그대로 사용` (파일 기반 키워드 전체 채택)
-- `직접 입력` (요청자가 키워드를 수동 입력)
-- `학습 결과에서 일부 선택` (LLM이 제시한 Top 10에서 선택)
+**하드코딩 풀 (폴백용)**:
+
+| 장르 | 대표 키워드 |
+|------|-------------|
+| 야구 | 올스타, 전반기 결산, 순위 경쟁, 우승 도전, 끝내기 홈런, 퍼펙트게임, 레전드 ... |
+| 축구 | 이적 시장, 챔피언스리그, 골든부트, 베스트 11 ... |
+| MMORPG | 신규 클래스, 레이드, 장비 강화, 길드전 ... |
+| 캐주얼 | 신규 스테이지, 협동 이벤트, 한정 스킨 ... |
+
+**요청자 선택**:
+- `모두 사용` → 전체 키워드 채택
+- `1,3,5` → 번호로 선택
+- 직접 입력 → 키워드 이름 직접 입력
 
 확정된 키워드를 `genre_phrases`로 저장.
 
@@ -285,16 +286,35 @@ python scripts/create_tabs.py \
 
 ---
 
-### 이벤트 명칭 자동 갱신 (학습 기반)
+### 이벤트 명칭 자동 갱신 (STABLE/CHANGEABLE 기반)
 
-> **[변경]** 웹서치 없이 0.5단계에서 학습한 패턴과 draft_events.json의 제목 후보를 사용한다.
+> **[업데이트]** 소스 xlsx의 모든 탭을 스캔해 제목 변경 이력을 분석한 후,
+> 역사적으로 변경된 적 있는 제목만 업데이트한다.
 
-- `historical_event_names.json` + `genre_phrases` 기반으로 LLM이 섹션별 신규 명칭 자동 제안
-- 제안 형식: 각 섹션별 상위 3개 후보 제시 → 요청자 번호 선택
+**`scripts/generate_event_names.py`의 `analyze_title_stability()` 동작**:
+
+```
+소스 xlsx 전체 날짜형 탭 스캔
+    ↓
+_get_base_pattern()으로 시즌 키워드 제거 → 기본 패턴 추출
+    ↓
+기본 패턴별 실제 제목 변형 집계
+    ↓
+변형 1개 → STABLE (모든 탭에서 동일) → 절대 변경 안 함
+변형 2개↑ → CHANGEABLE → 키워드 교체 or 시즌 접두어 삽입
+```
+
+**처리 규칙**:
+
+| 상황 | 처리 |
+|------|------|
+| STABLE 제목 | 항상 유지 (포인트레이스, 빙고이벤트 등) |
+| CHANGEABLE + 시즌 키워드 감지 | 키워드를 대상 월 키워드로 교체 |
+| CHANGEABLE + 시즌 키워드 없음 + 월 다름 | `N. 시즌키워드 텍스트` 형식으로 접두어 삽입 |
+| CHANGEABLE + 같은 달 | 변경 안 함 |
+
 - 선택 결과를 `event_names_config.json`에 저장
 - `create_tabs.py` 재실행으로 명칭 반영
-
-> `genre_phrases` 확정 시 웹서치 **완전 스킵** (0.5단계 이후 웹서치 없음).
 
 ---
 
@@ -476,10 +496,38 @@ python scripts/save_learning.py \
 ## 상태 전이
 
 ```
-IDLE → GENRE_SELECTING → PATTERN_LEARNING → KEYWORD_CONFIRMING → TAB_CONFIGURING
-    → ANALYZING → DRAFTING → REWARD_AUTO_CONFIRMING → REWARD_REVIEWING
-    → REVIEWING → OUTPUTTING → LEARNING_SAVING → DONE
+IDLE
+  │
+  ▼
+[START] agent_config.json 로드
+  ├─ default_genre 있음 ──────────────────────────────────┐
+  └─ default_genre 없음 → GENRE_SELECTING                 │
+        │                                                   │
+        ▼                                                   │
+      장르 입력 → agent_config.json 저장                   │
+        │                                                   │
+        └───────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+                          KEYWORD_GENERATING (LLM JSON 강제 모드)
+                                    │
+                                    ▼
+                          KEYWORD_CONFIRMING (모두사용 / 번호 / 직접입력)
+                                    │
+                                    ▼
+                          REF_TABS_COLLECTING (화살표 / 한국어 / 자동매핑)
+                                    │
+                                    ▼
+                          PIPELINE_RUNNING
+                          (generate_event_names → create_tabs →
+                           scan_rewards → recommend_rewards →
+                           analyze_patterns → save_learning)
+                                    │
+                                    ▼
+                                  DONE
 ```
+
+> **서버 상태 머신**: 대화 흐름은 LLM 없이 서버가 직접 관리. LLM은 키워드 생성 1회만 사용.
 
 세션 중단 시 `confirmed_events.json`에 진행 상태를 저장해 재개를 지원한다.
 

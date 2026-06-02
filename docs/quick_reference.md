@@ -62,20 +62,22 @@ python scripts/generate_event_names.py \
 | 이벤트 제목 설정 | `output/projects/event-planner/work/event_names_config.json` |
 | 소스 xlsx 캐시 | `output/gdrive_cache/*.xlsx` |
 | 최종 출력 | `output/projects/event-planner/file/*.xlsx` |
+| **에이전트 설정 (장르 학습)** | `output/config/agent_config.json` |
 
 ---
 
 ## SEASON_PATTERNS 감지 대상
 
-| 패턴 | 예시 |
-|------|------|
-| `\d+월\s*이달의` | 6월 이달의 |
-| `\d+월의` | 7월의 |
-| `(얼리썸머\|초여름\|쿨서머\|한여름\|늦여름)(의)?` | 한여름의 |
-| `(봄\|여름\|가을\|겨울)(의)` | 여름의 |
-| `(설날\|크리스마스\|추석\|핼러윈)` | 크리스마스 |
-| `(전반기\|후반기\|포스트시즌\|...)` | 전반기 |
-| `\d+주년` | 1주년 |
+| 패턴 | 예시 | 비고 |
+|------|------|------|
+| `\d+월\s*이달의` | 6월 이달의 | |
+| `\d+월의` | 7월의 | |
+| `(\d+월)\s(?=[가-힣])` | 6월 축제 | 후행 공백 포함 |
+| `(얼리썸머\|초여름\|쿨서머\|한여름\|늦여름)(의)?` | 한여름의 | |
+| `(봄\|여름\|가을\|겨울)(의)?` | 여름의, 여름 대축제 | ✅ `의` 선택적 (수정됨) |
+| `(설날\|크리스마스\|추석\|핼러윈)` | 크리스마스 | |
+| `(전반기\|후반기\|포스트시즌\|올스타\|드래프트)` | 전반기, 올스타 | ✅ 야구 시즌 용어 추가 |
+| `\d+주년` | 1주년 | |
 
 ---
 
@@ -123,5 +125,70 @@ for row in ws.iter_rows():
 | POST | `/api/event/create-tabs` | 탭 생성 실행 |
 | GET/POST | `/api/event/scan-rewards` | 보상 스캔 |
 | POST | `/api/event/recommend-rewards` | 보상 추천 |
+| POST | `/api/event/date-patterns` | 날짜별 이벤트 패턴 분석 |
 | POST | `/api/pm/chat` | PM 에이전트 채팅 |
 | POST | `/api/agent/chat` | 이벤트 플래너 에이전트 채팅 |
+| GET | `/api/pm/stream/<job_id>` | SSE 스트림 (실시간 진행 상황) |
+
+---
+
+## 이벤트 기획 에이전트 대화 흐름 (상태 머신)
+
+> LLM 없이 서버 상태 머신으로 처리 (Ollama 오류 영향 없음)
+
+```
+PM 핸드오프
+    │
+    ▼
+[START] output/config/agent_config.json에서 default_genre 로드
+    │
+    ├─ genre 있음 → 키워드 생성 단계로 바로 이동 (장르 질문 생략)
+    └─ genre 없음 → 장르 질문 (wait_genre)
+    │
+    ▼
+[wait_keywords] LLM 키워드 생성 (Ollama JSON 강제 모드)
+    - 장르 키워드 15개 + 시즌 키워드 7개
+    - 실패 시 하드코딩 풀 폴백
+    │
+    ▼
+[wait_ref_tabs] 참조 탭 입력 안내
+    - 화살표 패턴: 260625→260618
+    - 한국어 패턴: 260625는 260618을 참조
+    - "작업해줘" 입력 시: 가장 가까운 이전 탭으로 자동 매핑
+    │
+    ▼
+[PIPELINE] 파이프라인 자동 실행
+```
+
+### 장르 변경 방법
+```json
+// output/config/agent_config.json 수동 수정
+{ "default_genre": "축구" }
+```
+
+---
+
+## 이벤트 제목 변경 로직 (STABLE / CHANGEABLE)
+
+> `scripts/generate_event_names.py`의 `analyze_title_stability()` 참조
+
+```
+소스 xlsx 전체 탭 스캔
+    ↓
+_get_base_pattern()으로 시즌 키워드 제거 → 기본 패턴 추출
+    ↓
+기본 패턴별 변형 개수 집계
+    ↓
+┌─────────────────────────────────────────────────────┐
+│ STABLE   — 변형 1개 (항상 동일) → 절대 변경 안 함   │
+│ CHANGEABLE — 변형 2개 이상 (시즌별 달라짐) → 변경    │
+└─────────────────────────────────────────────────────┘
+```
+
+| 제목 예시 | 분류 | 처리 |
+|-----------|------|------|
+| `포인트레이스 이벤트` | STABLE | 항상 유지 |
+| `빙고이벤트` | STABLE | 항상 유지 |
+| `한여름의 응모권 이벤트` | CHANGEABLE | 시즌 키워드 교체 |
+| `전반기 챔피언 이벤트` | CHANGEABLE | 시즌 키워드 교체 |
+| `1. 응모권 이벤트` (키워드 없음) | CHANGEABLE | 시즌 접두어 삽입 |
