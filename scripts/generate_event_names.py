@@ -301,22 +301,93 @@ def analyze_title_stability(wb) -> tuple[set, set]:
     return stable_titles, changeable_types
 
 
+def _build_keyword_pool(target_m: int, genre_phrases: list, learned_kws: list) -> list:
+    """
+    이벤트 제목 변경에 사용할 중복 없는 키워드 풀 생성.
+    우선순위: 수집된 장르 키워드 → 학습 키워드 → 월별 시즌 fallback
+    """
+    pool = []
+    seen: set[str] = set()
+
+    def _add(kw: str):
+        kw = kw.strip()
+        if kw and kw not in seen:
+            pool.append(kw)
+            seen.add(kw)
+
+    # 1순위: genre_phrases 중 시즌 패턴에 매치되는 것 (가장 관련성 높음)
+    for phrase in genre_phrases:
+        if any(p.search(phrase) for p in SEASON_PATTERNS):
+            _add(phrase)
+
+    # 2순위: 학습된 키워드
+    for kw in learned_kws:
+        _add(kw)
+
+    # 3순위: 월별 시즌 fallback
+    for kw in MONTH_SEASON_FALLBACK.get(target_m, []):
+        _add(kw)
+
+    # 4순위: genre_phrases 나머지 (시즌 패턴 없어도 다양성용)
+    for phrase in genre_phrases:
+        _add(phrase)
+
+    # 최소 1개 보장
+    if not pool:
+        pool.append(MONTH_LABEL_KR.get(target_m, f"{target_m}월의"))
+
+    return pool
+
+
+def _apply_eui(kw: str, needs_eui: bool) -> str:
+    """
+    키워드에 '의' 접미사를 적절히 처리한다.
+    - 이미 '의'로 끝나면 그대로
+    - '의 '가 중간에 있는 복합 구문(예: '6월의 열기')이면 그대로 사용
+    - 단순 키워드이고 needs_eui이면 '의' 추가
+    """
+    if kw.endswith("의"):
+        return kw
+    if "의 " in kw:                # 복합 구문 ("6월의 열기" 등) → 그대로
+        return kw
+    if needs_eui:
+        return kw + "의"
+    return kw
+
+
+def _pick_from_pool(pool: list, offset: int, needs_eui: bool = True, exclude: str = "") -> str:
+    """
+    풀에서 offset 위치의 키워드를 선택 (중복 방지).
+    exclude와 동일하거나 유사한 키워드는 건너뜀.
+    """
+    excl_base = exclude.rstrip("의").strip()
+    n = len(pool)
+    for i in range(n):
+        kw = pool[(offset + i) % n]
+        if kw.rstrip("의").strip() == excl_base:
+            continue
+        return _apply_eui(kw, needs_eui)
+    # fallback
+    return _apply_eui(pool[offset % n], needs_eui)
+
+
 def _generate_creative_title(
     old_title:     str,
     event_type:    str,
     target_m:      int,
     genre_phrases: list[str],
     learned_kws:   list[str],
+    kw_pool:       list | None = None,
+    kw_offset:     int = 0,
 ) -> str | None:
     """
     시즌 키워드가 없는 CHANGEABLE 제목을 위해 새 제목 생성.
-    이벤트 유형의 핵심 후미(출석 이벤트 / 응모권 이벤트 등)를 보존하고
-    앞에 시즌 키워드를 붙인다.
-
-    예) "1. 벚꽃 엔딩 14일 출석 이벤트!" → "1. 7월의 14일 출석 이벤트!"
-    예) "2. 스프링 피날레 챌린지 응모권 이벤트!" → "2. 7월의 응모권 이벤트!"
+    kw_pool + kw_offset으로 이벤트마다 다른 키워드 사용 (중복 방지).
     """
-    season_kw = pick_best_season_kw(target_m, learned_kws, genre_phrases, "의")
+    if kw_pool is None:
+        kw_pool = _build_keyword_pool(target_m, genre_phrases, learned_kws)
+
+    season_kw = _pick_from_pool(kw_pool, kw_offset, needs_eui=True)
     if not season_kw:
         return None
 
@@ -337,50 +408,61 @@ def _generate_creative_title(
 
 
 def generate_new_title(
-    old_title:       str,
-    old_month:       int,
-    target_month:    int,
-    learned_kws:     list[str],
-    genre_phrases:   list[str],
-    stable_titles:   set | None = None,
-    changeable_types: set | None = None,   # ← 기존 changeable_bases 대체
+    old_title:        str,
+    old_month:        int,
+    target_month:     int,
+    learned_kws:      list[str],
+    genre_phrases:    list[str],
+    stable_titles:    set | None = None,
+    changeable_types: set | None = None,
+    kw_pool:          list | None = None,   # 탭별 키워드 풀 (중복 방지용)
+    kw_offset:        int = 0,              # 이벤트마다 다른 키워드 선택
 ) -> str | None:
     """
     이벤트 제목을 대상 월에 맞게 교체한다.
-
-    규칙:
-    - STABLE 제목 → 무조건 유지
-    - CHANGEABLE + 시즌 키워드 감지 → 키워드 교체
-    - CHANGEABLE + 시즌 키워드 없음 + 월 다름 → _generate_creative_title로 새 제목 생성
-    - 그 외 → 유지
+    kw_pool + kw_offset으로 이벤트마다 다른 키워드를 사용해 중복을 방지한다.
     """
     # ── STABLE 제목 → 항상 유지 ──────────────────────────────────────────────
     if stable_titles and old_title in stable_titles:
         return None
 
-    # ── 이벤트 유형 확인 ─────────────────────────────────────────────────────
     etype = detect_event_type(old_title)
     is_changeable = (changeable_types is None) or (etype in changeable_types)
-
     if not is_changeable:
-        return None   # CHANGEABLE 아닌 이벤트 유형 → 유지
+        return None
+
+    # 풀이 없으면 즉석 생성 (단일 호출 호환성)
+    if kw_pool is None:
+        kw_pool = _build_keyword_pool(target_month, genre_phrases, learned_kws)
 
     detected = detect_season_keyword(old_title)
+    needs_eui = True  # 기본적으로 접두어에 "의" 사용
 
-    # ── Case 1: 시즌 키워드 감지됨 → 교체 ──────────────────────────────────
+    # ── Case 1: 시즌 키워드 감지됨 → 풀에서 고유 키워드로 교체 ──────────────
     if detected:
         old_kw, _pat = detected
-        new_kw = pick_best_season_kw(target_month, learned_kws, genre_phrases, old_kw)
-        if old_kw == new_kw:
+        needs_eui = old_kw.endswith("의")
+
+        # 특수 처리: "N월 이달의" + 다른 달 → 숫자만 교체 (빠른 경로)
+        _nm = re.match(r"^(\d+)(월\s*이달의)$", old_kw)
+        if _nm:
+            _direct = f"{target_month}{_nm.group(2)}"
+            if _direct != old_kw:
+                new_title = old_title.replace(old_kw, _direct, 1)
+                return new_title if new_title != old_title else None
+            # 같은 달이면 풀 경로로 계속 진행
+
+        # 풀에서 고유 키워드 선택 (항상 풀 사용 → 이벤트마다 다른 키워드 보장)
+        candidate = _pick_from_pool(kw_pool, kw_offset, needs_eui=needs_eui, exclude=old_kw)
+        if not candidate or candidate == old_kw:
             return None
-        new_title = old_title.replace(old_kw, new_kw, 1)
+        new_title = old_title.replace(old_kw, candidate, 1)
         return new_title if new_title != old_title else None
 
-    # ── Case 2: 시즌 키워드 없음 + CHANGEABLE → 창의적 제목 생성 ──────────
-    # 같은 달이어도 참조 탭과 다른 창의적 이름으로 생성
-    # (동일 탭이 아닌 새 탭이므로 제목이 달라야 함)
+    # ── Case 2: 시즌 키워드 없음 + CHANGEABLE → 풀 키워드로 창의적 제목 생성 ─
     return _generate_creative_title(
-        old_title, etype, target_month, genre_phrases, learned_kws
+        old_title, etype, target_month, genre_phrases, learned_kws,
+        kw_pool=kw_pool, kw_offset=kw_offset,
     )
 
 
@@ -481,8 +563,13 @@ def generate(
             all_replacements[new_tab] = []
             continue
 
+        # ── 탭별 키워드 풀 생성 (중복 방지 핵심) ──────────────────────────────
+        tab_kw_pool = _build_keyword_pool(tab_target_m, genre_phrases, tab_learned_kws)
+        print(f"  [{new_tab}] 키워드 풀({len(tab_kw_pool)}개): {tab_kw_pool[:8]}{'...' if len(tab_kw_pool)>8 else ''}")
+
         replacements: list[tuple[str, str]] = []
         changed = 0
+        kw_offset = 0   # 이벤트마다 증가 → 서로 다른 키워드 선택
 
         for old_title in current_titles:
             new_title = generate_new_title(
@@ -490,10 +577,13 @@ def generate(
                 tab_learned_kws, genre_phrases,
                 stable_titles=stable_titles,
                 changeable_types=changeable_types,
+                kw_pool=tab_kw_pool,
+                kw_offset=kw_offset,
             )
             if new_title:
                 replacements.append((old_title, new_title))
                 changed += 1
+                kw_offset += 1   # 다음 이벤트는 다른 키워드 사용
                 print(f"  [{new_tab}] 변경: '{old_title}' → '{new_title}'")
             else:
                 print(f"  [{new_tab}] 유지: '{old_title}'")
