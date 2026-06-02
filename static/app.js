@@ -216,6 +216,11 @@ function streamPmJob(jobId, { bubble, body }) {
       body.innerHTML = mdToHtml(msgText);
     }
 
+    // 참조 탭 클릭 선택 UI
+    if (ev.type === 'tab_selector') {
+      _renderTabSelector(ev.new_tabs, ev.available_tabs, body);
+    }
+
     // PM → 에이전트 위임 이벤트
     if (ev.type === 'handoff') {
       chatMode     = `agent:${ev.agent}`;
@@ -1324,6 +1329,89 @@ async function loadGlFiles() {
          class="btn btn-sm btn-secondary">⬇️ 다운로드</a>
     </div>
   `).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 참조 탭 클릭 선택 UI
+// ═══════════════════════════════════════════════════════════════════════════
+function _renderTabSelector(newTabs, availableTabs, container) {
+  const wrap = document.createElement('div');
+  wrap.className = 'tab-selector-wrap';
+
+  const title = document.createElement('div');
+  title.className = 'tab-selector-title';
+  title.textContent = '📅 생성할 탭별 참조 탭 선택';
+  wrap.appendChild(title);
+
+  // 선택 상태 { newTab → selectedRef }
+  const selections = {};
+  newTabs.forEach(t => selections[t] = null);
+
+  newTabs.forEach(newTab => {
+    const row = document.createElement('div');
+    row.className = 'tab-selector-row';
+
+    const label = document.createElement('span');
+    label.className = 'tab-selector-label';
+    label.textContent = newTab;
+    row.appendChild(label);
+
+    const arrow = document.createElement('span');
+    arrow.style.cssText = 'color:#718096;margin:0 8px;font-size:16px';
+    arrow.textContent = '→';
+    row.appendChild(arrow);
+
+    const optWrap = document.createElement('div');
+    optWrap.className = 'tab-selector-options';
+
+    availableTabs.forEach(refTab => {
+      const btn = document.createElement('button');
+      btn.className = 'tab-ref-btn';
+      btn.textContent = refTab;
+      btn.dataset.newTab = newTab;
+      btn.dataset.refTab = refTab;
+      btn.addEventListener('click', () => {
+        // 같은 new_tab의 버튼들 선택 해제
+        optWrap.querySelectorAll('.tab-ref-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        selections[newTab] = refTab;
+        indicator.textContent = refTab;
+        indicator.style.color = '#48bb78';
+        // 모두 선택됐으면 확인 버튼 활성화
+        const allDone = Object.values(selections).every(v => v !== null);
+        submitBtn.disabled = !allDone;
+        if (allDone) submitBtn.classList.add('ready');
+      });
+      optWrap.appendChild(btn);
+    });
+
+    row.appendChild(optWrap);
+
+    const indicator = document.createElement('span');
+    indicator.className = 'tab-selector-indicator';
+    indicator.textContent = '미선택';
+    row.appendChild(indicator);
+
+    wrap.appendChild(row);
+  });
+
+  // 확인 버튼
+  const submitBtn = document.createElement('button');
+  submitBtn.className = 'btn btn-primary tab-selector-submit';
+  submitBtn.textContent = '✅ 선택 완료 → 작업 시작';
+  submitBtn.disabled = true;
+  submitBtn.addEventListener('click', () => {
+    const msg = newTabs.map(t => `${t}→${selections[t]}`).join(', ');
+    wrap.innerHTML = `<div style="color:#48bb78;font-size:13px">✅ 선택 완료: ${msg}</div>`;
+    // 채팅 입력창에 자동 입력 후 전송
+    const input = document.getElementById('pm-input');
+    input.value = msg;
+    pmSend();
+  });
+  wrap.appendChild(submitBtn);
+
+  container.appendChild(wrap);
+  document.getElementById('chat-messages').scrollTop = 99999;
 }
 
 // ── 초기 로드 ───────────────────────────────────────────────────────────────

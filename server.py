@@ -738,19 +738,14 @@ def _event_planner_agent(user_msg: str, history: list, context: dict, q: _queue_
         context["keywords"] = keywords
         context["_agent_step"] = "wait_ref_tabs"
         kw_preview = ", ".join(keywords[:5]) + ("..." if len(keywords) > 5 else "")
-        tabs_str  = ", ".join(new_tabs) if new_tabs else "(없음)"
-        avail_str = ", ".join(available_tabs[:10]) if available_tabs else "확인 불가"
-        msg = (
-            f"**{len(keywords)}개** 키워드가 저장됐습니다 ({kw_preview})\n\n"
-            f"이제 각 탭의 **참조 탭**을 알려주세요.\n\n"
-            f"📅 생성할 탭: {tabs_str}\n"
-            f"📂 사용 가능한 탭: {avail_str}"
-        )
-        if new_tabs and available_tabs:
-            msg += f"\n\n예시: {new_tabs[0]}→{available_tabs[0]}"
-            if len(new_tabs) > 1:
-                msg += f", {new_tabs[1]}→{available_tabs[min(1, len(available_tabs)-1)]}"
-        _done(msg)
+        msg = f"**{len(keywords)}개** 키워드가 저장됐습니다 ({kw_preview})\n\n아래에서 각 탭의 **참조 탭**을 클릭해서 선택해주세요."
+        q.put({"type": "message", "content": msg})
+        # 클릭형 탭 선택 UI 이벤트 — 프론트엔드에서 시각적 선택기로 렌더링
+        q.put({"type": "tab_selector",
+               "new_tabs": new_tabs,
+               "available_tabs": available_tabs[:15]})
+        q.put({"type": "context_update", "context": context})
+        q.put({"type": "done", "status": "chat"})
         return
 
     # ── STEP 3: 참조 탭 수집 → 파이프라인 실행 ─────────────────────────────

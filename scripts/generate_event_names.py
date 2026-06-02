@@ -452,9 +452,16 @@ def generate(
             print(f"  [{new_tab}] 참조 탭 없음 → 건너뜀")
             continue
 
+        # ★ 새 탭 날짜로부터 탭별 target_month 재계산 (탭마다 다를 수 있음)
+        new_dt = tab_to_date(new_tab)
+        tab_target_m = new_dt.month if new_dt else target_m
+        tab_learned_kws = season_kws_by_month.get(f"{tab_target_m:02d}", []) or learned_kws_for_target
+
         # 참조 탭 날짜 → 원본 月 파악
         ref_dt = tab_to_date(ref_tab)
-        old_month = ref_dt.month if ref_dt else target_m
+        old_month = ref_dt.month if ref_dt else tab_target_m
+
+        print(f"  [{new_tab}] 참조탭={ref_tab}  ref_month={old_month} → target_month={tab_target_m}")
 
         # 참조 탭에서 현재 이벤트 제목 추출
         current_titles = extract_section_titles(wb, ref_tab)
@@ -468,8 +475,8 @@ def generate(
 
         for old_title in current_titles:
             new_title = generate_new_title(
-                old_title, old_month, target_m,
-                learned_kws_for_target, genre_phrases,
+                old_title, old_month, tab_target_m,
+                tab_learned_kws, genre_phrases,
                 stable_titles=stable_titles,
                 changeable_types=changeable_types,
             )
