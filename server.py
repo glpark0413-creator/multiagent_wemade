@@ -80,6 +80,7 @@ EP_FILE       = OUTPUT_DIR / "projects" / EP_PROJECT_ID / "file"
 GL_DIR      = OUTPUT_DIR / "game-localizer"
 HANDOFF_DIR = OUTPUT_DIR / "handoff"
 JSON_DIR    = OUTPUT_DIR / "json"
+EP_CONFIG   = OUTPUT_DIR / "config" / "agent_config.json"
 
 sys.path.insert(0, str(SCRIPTS_DIR))
 
@@ -443,6 +444,30 @@ def agent_chat():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# 에이전트 설정 저장/불러오기 (장르 학습 등)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _load_agent_config() -> dict:
+    try:
+        if EP_CONFIG.exists():
+            return json.loads(EP_CONFIG.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+def _save_agent_config(data: dict):
+    try:
+        EP_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+        existing = _load_agent_config()
+        existing.update(data)
+        EP_CONFIG.write_text(
+            json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except Exception:
+        pass
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # 이벤트 기획 에이전트 — 상태 머신 헬퍼 (LLM 의존 없음, 완전 오프라인)
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -495,16 +520,18 @@ def _detect_genre(text: str) -> str:
             return genre
     return ""
 
-def _build_keyword_suggestion(genre: str, target_month: str) -> tuple:
-    """장르·시즌 키워드 메시지 생성 (LLM 불필요)"""
+def _build_keyword_suggestion_fallback(genre: str, target_month: str) -> tuple:
+    """키워드 제안 — 하드코딩 풀 폴백 (LLM 실패 시 사용)"""
     genre_kws = _GENRE_KW_POOL.get(genre, _GENRE_KW_POOL.get("스포츠", []))
     try:
         month_str = str(int(target_month.split("-")[1]))
     except Exception:
         month_str = str(datetime.now().month)
     season_kws = _SEASON_KW_POOL.get(month_str, [])
-    all_kws = genre_kws + season_kws
+    return _format_keyword_msg(genre, target_month, genre_kws, season_kws)
 
+def _format_keyword_msg(genre: str, target_month: str, genre_kws: list, season_kws: list) -> tuple:
+    all_kws = genre_kws + season_kws
     lines = [f"**{genre}** 장르 이벤트에 활용할 키워드를 제안합니다.\n"]
     lines.append(f"📌 **[{genre}] 장르 키워드**")
     for i, kw in enumerate(genre_kws, 1):
@@ -514,6 +541,60 @@ def _build_keyword_suggestion(genre: str, target_month: str) -> tuple:
         lines.append(f"{i}. {kw}")
     lines.append("\n사용할 키워드를 선택하거나 **'모두 사용'** 이라고 해주세요.\n번호 선택도 가능합니다. (예: 1,3,5,11,12)")
     return all_kws, "\n".join(lines)
+
+def _llm_generate_keywords(genre: str, target_month: str) -> tuple:
+    """LLM으로 키워드 생성 (Ollama JSON 강제 모드). 실패 시 하드코딩 풀로 폴백."""
+    if not HAS_AI:
+        return _build_keyword_suggestion_fallback(genre, target_month)
+
+    prompt = (
+        f"모바일 {genre} 게임 이벤트 기획용 한국어 키워드를 JSON으로만 반환하라.\n"
+        f"genre_keywords: {genre} 장르 이벤트에 쓰이는 한국어 키워드 15개\n"
+        f"season_keywords: {target_month} 시즌에 어울리는 한국어 키워드 7개\n"
+        f"규칙: 반드시 한국어만. 중국어·일본어·영어 금지. JSON만 출력.\n"
+        f'출력 형식: {{"genre_keywords":["키워드1","키워드2",...], "season_keywords":["키워드1",...]}}'
+    )
+
+    try:
+        if AI_MODE == "ollama":
+            resp = _AI.chat.completions.create(
+                model=OLLAMA_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                extra_body={"format": "json"},   # ← Ollama JSON 강제 모드
+            )
+            raw = resp.choices[0].message.content.strip()
+        else:
+            resp = _ANTHROPIC.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=512,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw = resp.content[0].text.strip()
+
+        # JSON 파싱
+        if "```" in raw:
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        data = json.loads(raw.strip())
+        genre_kws  = data.get("genre_keywords", [])
+        season_kws = data.get("season_keywords", [])
+
+        # 한국어 검증 (중국어·일본어 포함 키워드 제거)
+        def _is_korean_only(s: str) -> bool:
+            return not bool(_re_agent.search(r'[一-鿿぀-ヿ]', s))
+        genre_kws  = [k for k in genre_kws  if isinstance(k, str) and _is_korean_only(k)]
+        season_kws = [k for k in season_kws if isinstance(k, str) and _is_korean_only(k)]
+
+        if len(genre_kws) < 3:   # 너무 적으면 폴백
+            raise ValueError("insufficient keywords")
+
+        return _format_keyword_msg(genre, target_month, genre_kws, season_kws)
+
+    except Exception:
+        # LLM 실패 → 하드코딩 풀 폴백
+        return _build_keyword_suggestion_fallback(genre, target_month)
 
 def _parse_keyword_selection(user_msg: str, suggested: list) -> list:
     if any(w in user_msg for w in ["모두", "전부", "다 ", "다사용", "전체"]):
@@ -615,27 +696,37 @@ def _event_planner_agent(user_msg: str, history: list, context: dict, q: _queue_
 
     # ── START: 에이전트 시작 ───────────────────────────────────────────────
     if user_msg == "__agent_start__" or step == "start":
-        context["_agent_step"] = "wait_genre"
-        existing = context.get("genre", "")
-        if existing:
-            _done(f"장르가 **{existing}**로 설정되어 있습니다. 이대로 진행할까요? (예/아니오)")
+        # 저장된 장르 불러오기 (학습된 값 우선)
+        _cfg = _load_agent_config()
+        genre = context.get("genre") or _cfg.get("default_genre", "")
+
+        if genre:
+            # 장르 학습됨 → 장르 질문 생략, 바로 키워드 단계
+            context["genre"] = genre
+            context["_agent_step"] = "wait_keywords"
+            q.put({"type": "message", "content": f"**{genre}** 장르로 진행합니다. 키워드를 생성하는 중..."})
+            q.put({"type": "context_update", "context": context})
+            all_kws, kw_msg = _llm_generate_keywords(genre, target_month)
+            context["_suggested_keywords"] = all_kws
+            _done(kw_msg)
         else:
+            context["_agent_step"] = "wait_genre"
             _done("어떤 장르의 게임인가요?\n(예: 야구, 축구, MMORPG, 캐주얼, 퍼즐)")
         return
 
-    # ── STEP 1: 장르 수집 ──────────────────────────────────────────────────
+    # ── STEP 1: 장르 수집 (학습된 장르 없을 때만 실행) ─────────────────────
     if step == "wait_genre":
-        existing = context.get("genre", "")
-        if existing and any(w in user_msg for w in ["예", "네", "맞", "ok", "OK", "yes", "그래", "ㅇㅇ"]):
-            genre = existing
-        else:
-            genre = _detect_genre(user_msg) or existing
+        genre = _detect_genre(user_msg) or context.get("genre", "")
         if not genre:
             _done("장르를 인식하지 못했습니다. 다시 알려주세요.\n(예: 야구, 축구, MMORPG, 캐주얼, 퍼즐)")
             return
         context["genre"] = genre
         context["_agent_step"] = "wait_keywords"
-        all_kws, kw_msg = _build_keyword_suggestion(genre, target_month)
+        # 장르 학습 저장 (다음 요청부터 질문 생략)
+        _save_agent_config({"default_genre": genre})
+        q.put({"type": "message", "content": f"**{genre}** 장르로 설정됐습니다. 키워드를 생성하는 중..."})
+        q.put({"type": "context_update", "context": context})
+        all_kws, kw_msg = _llm_generate_keywords(genre, target_month)
         context["_suggested_keywords"] = all_kws
         _done(kw_msg)
         return
