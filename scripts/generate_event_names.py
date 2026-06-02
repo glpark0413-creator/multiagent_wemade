@@ -58,12 +58,12 @@ SEASON_PATTERNS = [
     re.compile(r"(\d+월)\s(?=[가-힣])"),
     # 얼리썸머의?, 초여름의?, 쿨 서머의?, 한여름의?, 늦여름의?
     re.compile(r"(얼리썸머|초여름|쿨\s*서머|한여름|늦여름)(의)?"),
-    # 봄/여름/가을/겨울 + 의
-    re.compile(r"(봄|여름|가을|겨울)(의)"),
+    # 봄/여름/가을/겨울 + "의" 선택적 (버그수정: "의" 없어도 매치)
+    re.compile(r"(봄|여름|가을|겨울)(의)?(?=[\s의이!,.]|$)"),
     # 설날/크리스마스/추석/핼러윈
     re.compile(r"(설날|크리스마스|추석|핼러윈)"),
-    # 전반기/후반기/시즌
-    re.compile(r"(전반기|후반기|포스트시즌|개막\s*시즌|정규\s*시즌)"),
+    # 전반기/후반기/시즌 — 야구 시즌 용어 확장
+    re.compile(r"(전반기|후반기|포스트시즌|개막\s*시즌|정규\s*시즌|올스타|드래프트)"),
     # 주년
     re.compile(r"\d+주년"),
 ]
@@ -208,20 +208,42 @@ def generate_new_title(
 ) -> str | None:
     """
     기존 제목에서 시즌 키워드를 찾아 대상 월 키워드로 교체한다.
+    시즌 키워드가 없고 참조 월 ≠ 대상 월이면 접두어로 삽입한다.
     변경이 없으면 None 반환.
     """
     detected = detect_season_keyword(old_title)
-    if not detected:
+
+    # ── Case 1: 시즌 키워드 감지됨 → 교체 ──────────────────────────────────
+    if detected:
+        old_kw, _pat = detected
+        new_kw = pick_best_season_kw(target_month, learned_kws, genre_phrases, old_kw)
+        if old_kw == new_kw:
+            return None
+        new_title = old_title.replace(old_kw, new_kw, 1)
+        return new_title if new_title != old_title else None
+
+    # ── Case 2: 시즌 키워드 없음 + 참조 월 ≠ 대상 월 → 접두어 삽입 ──────────
+    # 예: "1. 응모권 이벤트!" → "1. 여름의 응모권 이벤트!" (월이 달라질 때만)
+    if old_month == target_month:
+        return None   # 같은 달이면 접두어 불필요
+
+    # 번호형 제목("1. 텍스트") 에만 접두어 삽입 (제목형은 건드리지 않음)
+    num_m = re.match(r"^(\d+\.\s*)(.*)", old_title)
+    if not num_m:
         return None
 
-    old_kw, _pat = detected
-    new_kw = pick_best_season_kw(target_month, learned_kws, genre_phrases, old_kw)
-
-    if old_kw == new_kw:
+    prefix_kw = pick_best_season_kw(target_month, learned_kws, genre_phrases, "의")
+    if not prefix_kw:
         return None
 
-    new_title = old_title.replace(old_kw, new_kw, 1)
-    return new_title if new_title != old_title else None
+    # 이미 prefix_kw 가 포함된 경우 건너뜀
+    if prefix_kw.rstrip("의") in old_title:
+        return None
+
+    num_part  = num_m.group(1)   # "1. "
+    text_part = num_m.group(2)   # "응모권 이벤트!"
+    new_title = f"{num_part}{prefix_kw} {text_part}"
+    return new_title
 
 
 # ─── 메인 ─────────────────────────────────────────────────────────────────────
