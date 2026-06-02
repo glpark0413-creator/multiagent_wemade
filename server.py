@@ -668,6 +668,22 @@ def _event_planner_agent(user_msg: str, history: list, context: dict, q: _queue_
     # ── 소스 파일에서 available_tabs 추출 ─────────────────────────────────
     available_tabs: list = []
     source = context.get("source_path", "")
+
+    # Google Sheets URL → 로컬 캐시 경로로 변환
+    if source:
+        try:
+            from gdrive_utils import is_google_url
+            if is_google_url(source):
+                source_local, _ = resolve_source(source)
+            else:
+                source_local = source
+            # 변환된 로컬 경로를 context에도 저장 (파이프라인에서 재사용)
+            if Path(source_local).exists():
+                context["source_path"] = source_local
+                source = source_local
+        except Exception:
+            pass
+
     if source and Path(source).exists():
         try:
             import openpyxl as _xl
@@ -675,7 +691,7 @@ def _event_planner_agent(user_msg: str, history: list, context: dict, q: _queue_
             available_tabs = sorted(
                 [s for s in wb.sheetnames if _re_agent.match(r'^\d{6}$', s)],
                 reverse=True
-            )[:10]
+            )[:15]   # 최근 15개
             wb.close()
         except Exception:
             pass
