@@ -196,7 +196,7 @@ def apply_replacements(ws, replacements, date_map=None, event_name_replacements=
                     new_date = date(year, month, day)
                 changed.append((cell.coordinate, str(old_date), str(new_date)))
                 cell.value = new_date
-                cell.fill  = FILL_DATE
+                # 날짜 변경은 하이라이트 없음 (보상 변경만 표기)
                 continue
 
             if not isinstance(cell.value, str):
@@ -225,8 +225,7 @@ def apply_replacements(ws, replacements, date_map=None, event_name_replacements=
             if new_val != original_val:
                 changed.append((cell.coordinate, original_val, new_val))
                 cell.value = new_val
-                # 날짜·헤더 문자열 변경 → 연초록
-                cell.fill = FILL_TEXT
+                # 날짜·텍스트 변경은 하이라이트 없음 (보상 변경만 표기)
 
     return changed
 
@@ -311,62 +310,100 @@ def _find_prev_same_type_ws(wb, ref_tab: str, ref_pairs: list) -> tuple:
     return None, None
 
 
-def highlight_reward_diffs(ws_new, prev_ws) -> list:
+def apply_prev_type_rewards(ws_new, prev_ws) -> int:
     """
-    '보상 아이템'/'보상 수량' 헤더를 섹션 기준점으로 삼아 이전 탭과 비교한다.
-    절대 행 번호가 아닌 '헤더로부터의 오프셋'으로 정렬하므로
-    탭 구조가 약간 달라도 동일 이벤트 섹션끼리 정확하게 비교한다.
+    이전 동일 타입 탭의 보상 값을 새 탭에 실제로 적용한다.
+    섹션 헤더 기준 오프셋으로 정렬하므로 행 번호가 달라도 올바르게 매핑된다.
 
-    - ws_new : 새로 생성된 워크시트
-    - prev_ws: 이전 동일 타입 탭의 워크시트
-    - 반환: [(coord, prev_value, new_value), ...]
+    - ws_new : 새로 생성된 워크시트 (현재 참조 탭의 값이 들어있음)
+    - prev_ws: 이전 동일 타입 탭 (이 값으로 보상을 갱신)
+    - 반환: 실제로 변경된 셀 수
     """
     _SKIP = {"보상 아이템", "보상 수량", "확률", "획득 보상"}
 
     new_pairs  = _find_reward_col_pairs(ws_new)
     prev_pairs = _find_reward_col_pairs(prev_ws)
 
-    # 이전 탭에서 (ic, qc) → header_row 목록 매핑
     prev_header_map: dict[tuple, list[int]] = {}
     for h, ic, qc in prev_pairs:
         prev_header_map.setdefault((ic, qc), []).append(h)
 
-    hits = []
-
+    count = 0
     for new_h, ic, qc in new_pairs:
         prev_headers = prev_header_map.get((ic, qc))
         if not prev_headers:
-            continue                    # 동일 열 쌍 없음 → 비교 불가
-        prev_h = prev_headers[0]        # 가장 가까운 섹션 사용
+            continue
+        prev_h = prev_headers[0]
 
-        # 헤더 아래 데이터 행을 오프셋으로 비교
         offset = 1
         while True:
             new_iv = ws_new.cell(new_h + offset, ic).value
-            new_qv = ws_new.cell(new_h + offset, qc).value
             if new_iv is None:
-                break                   # 새 탭 섹션 종료
+                break
 
-            prev_iv = prev_ws.cell(prev_h + offset, ic).value
-            prev_qv = prev_ws.cell(prev_h + offset, qc).value
+            prev_iv = ws_new.cell(new_h + offset, ic).value   # 현재 값
+            prev_qv = ws_new.cell(new_h + offset, qc).value
 
-            # 보상 아이템 비교
-            if (new_iv not in _SKIP and prev_iv not in _SKIP
-                    and prev_iv is not None and new_iv != prev_iv
-                    and not isinstance(new_iv, (datetime, date))):
-                cell = ws_new.cell(new_h + offset, ic)
-                cell.fill = FILL_REWARD
-                hits.append((cell.coordinate, prev_iv, new_iv))
+            src_iv = prev_ws.cell(prev_h + offset, ic).value  # 이전 탭 값
+            src_qv = prev_ws.cell(prev_h + offset, qc).value
 
-            # 보상 수량 비교
-            if (new_qv is not None and new_qv not in _SKIP
-                    and prev_qv is not None and new_qv != prev_qv
-                    and not isinstance(new_qv, (datetime, date))):
-                cell = ws_new.cell(new_h + offset, qc)
-                cell.fill = FILL_REWARD
-                hits.append((cell.coordinate, prev_qv, new_qv))
+            # 보상 아이템 적용
+            if (src_iv is not None and src_iv not in _SKIP
+                    and new_iv not in _SKIP
+                    and not isinstance(src_iv, (datetime, date))
+                    and src_iv != new_iv):
+                ws_new.cell(new_h + offset, ic).value = src_iv
+                count += 1
+
+            # 보상 수량 적용
+            if (src_qv is not None and src_qv not in _SKIP
+                    and not isinstance(src_qv, (datetime, date))
+                    and src_qv != prev_qv):
+                ws_new.cell(new_h + offset, qc).value = src_qv
+                count += 1
 
             offset += 1
+
+    return count
+
+
+def highlight_reward_diffs(ws_new, ref_snapshot: dict) -> list:
+    """
+    보상 셀을 참조 탭 스냅샷과 비교하여 실제로 달라진 셀에 FILL_REWARD 적용.
+
+    - ws_new       : 보상값이 이미 업데이트된 새 워크시트
+    - ref_snapshot : 참조 탭(복사 원본) 스냅샷 {(row, col): value}
+    - 반환: [(coord, ref_value, new_value), ...]
+    """
+    _SKIP = {"보상 아이템", "보상 수량", "확률", "획득 보상"}
+
+    new_pairs = _find_reward_col_pairs(ws_new)
+    reward_coords: set[tuple[int, int]] = set()
+
+    for h_row, item_col, qty_col in new_pairs:
+        for r in range(h_row + 1, ws_new.max_row + 1):
+            iv = ws_new.cell(row=r, column=item_col).value
+            qv = ws_new.cell(row=r, column=qty_col).value
+            if iv is None:
+                break
+            if iv not in _SKIP:
+                reward_coords.add((r, item_col))
+            if qv is not None and qv not in _SKIP:
+                reward_coords.add((r, qty_col))
+
+    hits = []
+    for (r, c) in sorted(reward_coords):
+        cell    = ws_new.cell(row=r, column=c)
+        ref_val = ref_snapshot.get((r, c))
+        new_val = cell.value
+        if ref_val == new_val:
+            continue
+        if ref_val is None or new_val is None:
+            continue
+        if isinstance(new_val, (datetime, date)) or isinstance(ref_val, (datetime, date)):
+            continue
+        cell.fill = FILL_REWARD
+        hits.append((cell.coordinate, ref_val, new_val))
 
     return hits
 
@@ -503,6 +540,7 @@ def run_with_config(
             raise ValueError(f"소스 탭 '{src}' 없음. 사용 가능: {wb.sheetnames}")
         ws = wb[src]
         ref_pairs = _find_reward_col_pairs(ws)
+        ref_snap  = snapshot_ws(ws)
         changes = apply_replacements(
             ws,
             cfg["replacements"],
@@ -510,10 +548,11 @@ def run_with_config(
             event_name_replacements=cfg.get("event_name_replacements"),
         )
         ws.title = new_tab
-        # 이전 동일 타입 탭과 보상 섹션 기준 비교 → 하이라이트
+        # 이전 동일 타입 탭 보상 적용 → 참조 대비 하이라이트
         _, prev_ws = _find_prev_same_type_ws(wb, src, ref_pairs)
         if prev_ws:
-            highlight_reward_diffs(ws, prev_ws)
+            apply_prev_type_rewards(ws, prev_ws)
+            highlight_reward_diffs(ws, ref_snap)
         all_changes[new_tab] = changes
         all_season_warnings[new_tab] = warn_season_keywords(ws, new_tab)
 
@@ -662,14 +701,19 @@ def _cli_main(source: str, output: str, new_tabs: list, ref_tabs: list):
             event_name_replacements=event_repls,
         )
 
-        # ── 보상 하이라이트: 이전 동일 타입 탭과 섹션 기준 비교 ───────────────
+        # ── 보상 처리: 이전 동일 타입 탭 보상을 실제로 적용 후 참조 대비 하이라이트
         ref_pairs = _find_reward_col_pairs(ws_src)
+        ref_snap  = snapshot_ws(ws_src)   # 참조 탭(260611) 스냅샷 — 하이라이트 기준
         prev_tab, prev_ws = _find_prev_same_type_ws(wb, src, ref_pairs)
+
         if prev_ws:
-            print(f"  [{new_tab}] 보상 비교 기준: '{prev_tab}' (이전 동일 타입 탭)")
-            reward_hits = highlight_reward_diffs(ws_new, prev_ws)
+            # 1) 이전 동일 타입 탭(260514) 보상값을 새 탭에 실제로 적용
+            applied = apply_prev_type_rewards(ws_new, prev_ws)
+            print(f"  [{new_tab}] 이전 동일 타입 탭 '{prev_tab}' 보상 적용: {applied}개 셀")
+            # 2) 적용 후 참조 탭(260611) 대비 달라진 보상 셀만 하이라이트
+            reward_hits = highlight_reward_diffs(ws_new, ref_snap)
             if reward_hits:
-                print(f"  [{new_tab}] 보상 변경 셀 {len(reward_hits)}개 하이라이트:")
+                print(f"  [{new_tab}] 보상 변경 셀 {len(reward_hits)}개 하이라이트 (vs {src}):")
                 for coord, old, new_v in reward_hits:
                     print(f"    {coord}: '{old}' → '{new_v}'")
         else:
