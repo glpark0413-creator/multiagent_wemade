@@ -225,9 +225,8 @@ def apply_replacements(ws, replacements, date_map=None, event_name_replacements=
             if new_val != original_val:
                 changed.append((cell.coordinate, original_val, new_val))
                 cell.value = new_val
-                # 날짜·헤더 문자열 변경 → 연초록 (보상 열 제외)
-                if cell.column not in REWARD_COLS:
-                    cell.fill = FILL_TEXT
+                # 날짜·헤더 문자열 변경 → 연초록
+                cell.fill = FILL_TEXT
 
     return changed
 
@@ -295,7 +294,10 @@ def highlight_reward_diffs(ws_new, src_snapshot: dict) -> list:
         for r in range(h_row + 1, ws_new.max_row + 1):
             iv = ws_new.cell(row=r, column=item_col).value
             qv = ws_new.cell(row=r, column=qty_col).value
-            if iv is not None and iv not in _SKIP_VALUES:
+            # 보상 아이템 열이 비면 섹션 종료
+            if iv is None:
+                break
+            if iv not in _SKIP_VALUES:
                 reward_coords.add((r, item_col))
             if qv is not None and qv not in _SKIP_VALUES:
                 reward_coords.add((r, qty_col))
