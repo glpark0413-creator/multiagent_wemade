@@ -1,8 +1,9 @@
 # 이벤트 기획 에이전트 (event-planner)
 
 > **호출자**: 메인 PM 에이전트 (CLAUDE.md)
-> **역할**: 모바일 게임 이벤트 기획안 자동 생성 → 검토 → xlsx / Google Sheets 출력
-> **참조 설계서**: `event_planner_agent_design.md`
+> **역할**: 모바일 게임 이벤트 기획안 자동 생성 → 보상 패턴 적용 → 이벤트 구성 추천 → xlsx 출력
+> **서버**: Flask SSE 스트리밍 서버 (`server.py`) — `http://0.0.0.0:5050`
+> **최종 업데이트**: 2026-06-04
 
 ---
 
@@ -10,9 +11,9 @@
 
 - 기존 xlsx의 열 구조·포맷·카테고리를 절대 변경하지 않는다
 - 단계별 산출물은 즉시 지정 경로에 저장한다 (세션 중단 시 재개 가능)
-- 요청자 확인이 필요한 결정은 반드시 AskUserQuestion으로 처리한다
-- AskUserQuestion 옵션은 최대 4개 제한을 준수한다
-- **기존 파일에서 학습한 패턴을 웹서치보다 우선 사용한다** (토큰 절약)
+- **LLM은 키워드 생성 1회만 사용** — 나머지 판단은 규칙 기반(서버 상태 머신)으로 처리
+- **기존 파일에서 학습한 패턴을 우선 사용** (토큰 절약)
+- 이벤트 제목에 블랙리스트 키워드가 포함되지 않도록 반드시 필터링한다
 
 ---
 
@@ -25,273 +26,216 @@ PM이 전달하는 `output/handoff/event-planner_input.json`을 먼저 읽는다
   "source_path": "소스 xlsx 경로 또는 Google Sheets URL",
   "target_month": "YYYY-MM",
   "market": "타겟 마켓",
-  "genre": "세부 장르 (없으면 null — 0단계에서 선택)",
+  "genre": "세부 장르 (없으면 null — STEP 1에서 선택)",
   "new_tab_names": ["YYMMDD", ...],
+  "ref_tab_names": ["YYMMDD", ...],
   "update_notes": "업데이트 내용 (없으면 null)"
 }
 ```
 
 ---
 
-## 실행 단계
+## 서버 상태 머신 (5단계)
 
-### 0단계 — 장르 확인 (학습된 장르가 없는 경우에만)
+대화 흐름 전체를 LLM 없이 서버가 직접 관리한다. 각 단계는 `context["_agent_step"]`으로 추적된다.
 
-> **[업데이트]** `output/config/agent_config.json`에 `default_genre`가 저장되어 있으면 장르 질문을 생략하고 바로 키워드 단계로 진행한다.
-
-```json
-// output/config/agent_config.json
-{ "default_genre": "야구" }
 ```
-
-장르가 저장되지 않은 경우에만 사용자에게 질문:
-- 예: 야구, 축구, MMORPG, 캐주얼, 퍼즐
-
-장르를 처음 입력하면 자동으로 `agent_config.json`에 저장된다 (다음 요청부터 질문 생략).
+start
+  │
+  ▼
+STEP 1: wait_genre
+  - agent_config.json에 default_genre 있으면 자동 스킵
+  - 없으면 사용자에게 장르 선택 요청
+  │
+  ▼
+STEP 2: wait_keywords
+  - Claude CLI로 장르·시즌 키워드 생성 (JSON 강제 모드)
+  - 블랙리스트 필터링 후 사용자에게 확인
+  │
+  ▼
+STEP 3: wait_ref_tabs
+  - 생성할 탭명과 참조 탭명 수집
+  - "나머지도 동일?" 단축 질문으로 최소화
+  │
+  ▼
+STEP 4: wait_event_composition
+  - 이벤트 구성 패턴 분석 실행 (_analyze_event_composition)
+  - 필수/선택적/추가가능 이벤트 분류 후 사용자 답변 수신
+  - 사용자 선택 파싱 → events_to_remove / events_to_add 결정
+  │
+  ▼
+STEP 5: done
+  - 파이프라인 실행 (_run_event_pipeline)
+```
 
 ---
 
-### 0.5단계 — 키워드 생성 (LLM — Ollama JSON 강제 모드)
+## LLM 연동 (Claude CLI)
 
-> **[업데이트]** 웹서치 없이 LLM이 직접 키워드를 생성한다. Ollama JSON 강제 모드(`format: json`)를 사용해 파싱 오류를 방지한다.
+### 우선순위 탐색 순서
+1. `%APPDATA%\npm\claude.cmd` → Claude CLI (최우선)
+2. Anthropic API 키 존재 시 → Anthropic SDK
+3. Ollama 서버 응답 시 → Ollama
+4. 없으면 → 규칙 기반 폴백 (키워드 하드코딩 풀 사용)
 
-**LLM 호출 방식**:
+### Claude CLI 호출 방식
 ```python
-# Ollama JSON 강제 모드 — 유효한 JSON만 출력
-extra_body={"format": "json"}
+cmd = ["cmd", "/c", r"%APPDATA%\npm\claude.cmd"]
+result = subprocess.run(cmd + ["-p", prompt], capture_output=True, text=True, timeout=60)
 ```
 
-**프롬프트 구조**:
-- `genre_keywords`: 장르 게임 이벤트에 쓰이는 한국어 키워드 15개
-- `season_keywords`: 대상 월 시즌에 맞는 한국어 키워드 7개
+### 키워드 생성 프롬프트 구조
+```
+{genre} 게임의 이벤트 기획 키워드를 생성하세요.
+반드시 JSON 형식으로만 응답하세요:
+{
+  "genre_keywords": ["키워드1", ...],  // 15개
+  "season_keywords": ["키워드1", ...]   // 7개
+}
+```
 
-**폴백 순서**:
-1. LLM 정상 응답 → 한국어 검증 후 사용 (중국어·일본어 자동 제거)
-2. LLM 실패 (JSON 오류, 키워드 3개 미만) → 하드코딩 풀 (`_GENRE_KW_POOL` + `_SEASON_KW_POOL`) 사용
+---
 
-**하드코딩 풀 (폴백용)**:
+## 키워드 블랙리스트 필터링
+
+`scripts/generate_event_names.py`의 `_is_valid_keyword()` 함수가 모든 키워드를 검증한다.
+
+### 블랙리스트 (정확 매칭)
+```python
+_KW_BLACKLIST = {
+    "이벤트", "시즌", "보상", "미션", "대회", "경기", "대결",
+    "선수", "챌린지", "클럽", "모임", "대전", "단전", "경기대회", "선수상"
+}
+```
+
+### 블랙리스트 접미사 (suffix 매칭)
+```python
+_KW_BLACKLIST_SUFFIX = ("대회", "경기", "대결", "대전", "단전", "클럽", "모임")
+```
+
+### 유효 키워드 조건
+- 영문자만 포함된 단어 제외
+- 블랙리스트 정확 매칭 제외
+- 블랙리스트 접미사로 끝나는 단어 제외
+- 최소 2글자 이상
+- 조건 통과한 키워드만 이벤트 제목에 사용
+
+### 폴백 하드코딩 풀
 
 | 장르 | 대표 키워드 |
 |------|-------------|
-| 야구 | 올스타, 전반기 결산, 순위 경쟁, 우승 도전, 끝내기 홈런, 퍼펙트게임, 레전드 ... |
+| 야구 | 올스타, 전반기 결산, 순위 경쟁, 우승 도전, 끝내기 홈런, 퍼펙트게임 ... |
 | 축구 | 이적 시장, 챔피언스리그, 골든부트, 베스트 11 ... |
 | MMORPG | 신규 클래스, 레이드, 장비 강화, 길드전 ... |
 | 캐주얼 | 신규 스테이지, 협동 이벤트, 한정 스킨 ... |
 
-**요청자 선택**:
-- `모두 사용` → 전체 키워드 채택
-- `1,3,5` → 번호로 선택
-- 직접 입력 → 키워드 이름 직접 입력
-
-확정된 키워드를 `genre_phrases`로 저장.
-
 ---
 
-### 1단계 — 생성 탭명 확인
+## 탭 생성 파이프라인 (`scripts/create_tabs.py`)
 
-`new_tab_names`가 비어 있으면 요청자에게 텍스트로 입력받는다 (YYMMDD 형식).
-
----
-
-### 2단계 — 참조 탭 선택
-
-생성 탭 1개당 AskUserQuestion 1회:
-- 질문: `"{새탭명}" 시트는 어떤 기존 탭을 참조할까요?`
-- 옵션: 최신 날짜형 탭 최대 3개 + `직접 입력`
-
-복수 탭: 첫 번째 선택 직후 `"나머지도 동일 참조탭으로?"` 단축 질문.
-
----
-
-### 3단계 — 업데이트 내용 확인
-
-`update_notes`가 있으면 내용을 파싱해 적용할 변경 목록을 확인한다.
-없으면 날짜·헤더 갱신만 진행한다.
-
----
-
-### Phase 1 — 기존 문서 분석 (학습 강화)
-
-> **[변경]** 단순 구조 분석에서 이벤트 일정 패턴·제목 패턴·보상 패턴까지 통합 학습한다.
-> 모든 학습 결과는 요약 JSON으로 저장하고 원문 행 데이터는 LLM에 전달하지 않는다 (토큰 절약).
-
-**스크립트 실행**:
-```bash
-python scripts/create_tabs.py --source "{source_path}" --analyze-only
-
-python scripts/extract_event_names.py "{source_path}" \
-    --output output/event-planner/work/historical_event_names.json \
-    --summarize
-
-python scripts/analyze_schedule_patterns.py "{source_path}" \
-    --output output/event-planner/work/schedule_patterns.json
-
-python scripts/scan_rewards_by_event.py "{source_path}" \
-    --output output/event-planner/work/reward_by_event.json \
-    --summarize   # 이벤트별 보상 평균/중앙값만 저장 (원문 행 미포함)
+### 실행 흐름
+```
+1. 참조 탭(ref_tab) 복사 → 신규 탭(ws_new) 생성
+2. apply_replacements() — 날짜/텍스트 치환 (하이라이트 없음)
+3. _find_all_prev_same_type_ws() — 동일 타입 이력 탭 전체 수집
+4. apply_balanced_rewards() — 보상 패턴 분석 및 자동 변경
+5. highlight_reward_diffs() — 변경된 보상 셀 하이라이트 (연주황 FFD966)
+6. _remove_event_sections() — 사용자가 제거 요청한 이벤트 섹션 삭제
+7. _add_event_sections() — 사용자가 추가 요청한 이벤트 섹션 이력에서 복사
 ```
 
-**LLM 수행** (4개 JSON 요약 기반):
-- 열 이름 의미 추론 (약어·비표준 명칭)
-- 날짜 포맷 다양성 해석
-- 카테고리 분류 체계 파악
-- **이벤트 일정 패턴 학습** (아래 Phase 1.5 참조)
-- **이벤트 제목·내용 패턴 학습** (0.5단계와 통합)
-- **보상 기준선 학습** (아래 Phase 1.6 참조)
-
-**산출물**:
-- `output/event-planner/work/template.json`
-- `output/event-planner/work/history_stats.json`
-- `output/event-planner/work/historical_event_names.json`
-- `output/event-planner/work/schedule_patterns.json`
-- `output/event-planner/work/reward_by_event.json`
-
-**실패 처리**: 접근 오류 → 에스컬레이션 / 열 구조 불충분 → 자동 재시도 1회 후 에스컬레이션
-
----
-
-### Phase 1.5 — 이벤트 일정 패턴 자동 학습
-
-> **[신규]** 기존 탭들의 이벤트 날짜 데이터를 분석해 일정 배치 규칙을 자동 학습한다.
-
-`schedule_patterns.json` 구조:
-```json
-{
-  "avg_events_per_month": 8,
-  "avg_duration_by_type": {
-    "출석이벤트": 7,
-    "던전이벤트": 14,
-    "할인이벤트": 3
-  },
-  "gap_between_events": {
-    "min_days": 1,
-    "typical_days": 2
-  },
-  "overlap_rules": {
-    "출석이벤트+던전이벤트": "허용",
-    "할인이벤트+할인이벤트": "금지"
-  },
-  "anchor_events": [
-    {"type": "출석이벤트", "typical_start": "월초 1~3일"},
-    {"type": "업데이트기념", "typical_start": "업데이트일 당일"}
-  ],
-  "month_specific": {
-    "01": {"notes": "신년 이벤트 필수"},
-    "05": {"notes": "골든위크 (일본) 집중 배치"}
-  }
-}
-```
-
-**LLM이 신규 탭 일정 생성 시 적용 규칙**:
-1. `anchor_events` → 월 고정 위치 이벤트부터 배치
-2. `avg_events_per_month` 범위 내에서 총 이벤트 수 결정
-3. `avg_duration_by_type` 기반으로 각 이벤트 기간 설정
-4. `gap_between_events` 준수 (최소 간격 위반 시 자동 조정)
-5. `overlap_rules` 위반 이벤트 자동 재배치
-6. `month_specific` 노트가 있으면 해당 규칙 우선 적용
-7. 대상 연월 + 마켓 + 시즌 맥락 최종 반영
-
----
-
-### Phase 1.6 — 보상 기준선 자동 학습
-
-> **[신규]** 기존 이벤트별 보상 데이터를 학습해 신규 탭 보상 추천의 기준선을 수립한다.
-
-`reward_by_event.json` 구조 (요약형):
-```json
-{
-  "이벤트유형별_보상_기준": {
-    "출석이벤트": {
-      "골드": {"median": 500000, "range": [300000, 800000]},
-      "다이아": {"median": 50, "range": [30, 80]},
-      "trend": "stable"
-    },
-    "던전이벤트": {
-      "강화석": {"median": 20, "range": [10, 30]},
-      "trend": "increasing"
-    }
-  },
-  "최근_3탭_보상_변화율": {
-    "골드": "+5%",
-    "다이아": "+10%"
-  },
-  "시장별_보정": {
-    "일본": {"다이아": "+15%"},
-    "한국": {"골드": "+10%"}
-  }
-}
-```
-
----
-
-### Phase 2 — 이벤트 초안 생성 (자동화 강화)
-
-> **[변경]** 학습된 패턴(일정·제목·보상)을 모두 반영해 초안을 완성도 높게 자동 생성한다.
-
-**입력**: `template.json`, `history_stats.json`, `schedule_patterns.json`,
-`historical_event_names.json`, `reward_by_event.json`,
-`target_month`, `market`, `genre`, `genre_phrases`
-
-**LLM 수행**:
-1. **일정 자동 배치**: Phase 1.5 학습 규칙 기반으로 이벤트별 시작일·종료일 산출
-2. **제목 자동 생성**: 학습된 제목 패턴 + `genre_phrases` 조합으로 후보 2~3개 생성
-   - 패턴: `[시즌 키워드] + [장르 특화 동사] + [보상·혜택 표현]`
-   - 예) `"여름 대모험 귀환 이벤트"`, `"7월 던전 정복 축제"`
-3. **보상 자동 추천**: Phase 1.6 기준선 × 최근 변화율 × 마켓 보정 적용
-   - 신뢰도 HIGH (range 내 수렴) → 자동 확정, 검토 불요
-   - 신뢰도 LOW (range 이탈 또는 신규 아이템) → 검토 큐에 추가
-
-**산출물**: `output/event-planner/work/draft_events.json`
-
-```json
-{
-  "events": [
-    {
-      "title": "7월 대모험 귀환 이벤트",
-      "title_candidates": ["귀환 대축제", "7월 탐험가의 날"],
-      "start_date": "2026-07-01",
-      "end_date": "2026-07-07",
-      "event_type": "출석이벤트",
-      "category": "...",
-      "rewards": [
-        {"item": "골드", "amount": 520000, "confidence": "HIGH", "basis": "median+trend"},
-        {"item": "다이아", "amount": 55, "confidence": "LOW", "basis": "range_outlier"}
-      ],
-      "schedule_confidence": "HIGH",
-      "notes": "골든위크 이후 복귀 유저 타겟"
-    }
-  ]
-}
-```
-
-**성공 기준**:
-- 이벤트 수: 월별 평균 ±1 범위
-- 모든 이벤트가 필수 열을 채움
-- 임시 일정이 대상 연월 범위 내
-- 모든 보상 항목에 `confidence` 값 부여
-
-**실패 처리**: 규칙 위반 → 자동 재시도 최대 2회
-
----
-
-### 이벤트 날짜·헤더 자동 갱신
-
+### CLI 호출 형식
 ```bash
 python scripts/create_tabs.py \
-    --source "{source_path}" \
-    --output "{output_xlsx}" \
-    --tabs "{탭명1},{탭명2}" \
-    --ref-tabs "{참조탭1},{참조탭2}"
+    {source} {output} {new_tabs} [{ref_tabs}] \
+    [--remove-events "이벤트명1,이벤트명2"] \
+    [--add-events "이벤트명1,이벤트명2"]
 ```
 
 ---
 
-### 이벤트 명칭 자동 갱신 (STABLE/CHANGEABLE 기반)
+## 보상 자동 변경 패턴
 
-> **[업데이트]** 소스 xlsx의 모든 탭을 스캔해 제목 변경 이력을 분석한 후,
-> 역사적으로 변경된 적 있는 제목만 업데이트한다.
+### A타입 / B타입 탭 구분
 
-**`scripts/generate_event_names.py`의 `analyze_title_stability()` 동작**:
+| 구분 | 판별 기준 | 예시 이벤트 |
+|---|---|---|
+| A타입 | 보상 아이템 열(ic) ≤ 4 또는 포인트레이스·룰렛이벤트·빙고이벤트 포함 | 포인트레이스, 룰렛이벤트, 빙고이벤트 |
+| B타입 | 보상 컬럼 쌍 겹침 ≥ 3개 | 출석이벤트, 미션이벤트, 응모권이벤트 |
+
+### 동일 타입 이력 탭 수집 (`_find_all_prev_same_type_ws`)
+- B타입: 참조 탭과 컬럼 시그니처 3개 이상 겹치는 이전 탭
+- A타입 폴백: A타입 컬럼 쌍(ic≤4) 1개 이상 겹치는 이전 탭
+
+### 보상 변경 로직 (`apply_balanced_rewards`)
+
+섹션 단위로 nth 동일 컬럼 쌍을 매핑하여 비교한다 (섹션 오염 방지).
+
+| 상황 | 처리 |
+|---|---|
+| 이전 탭과 아이템이 다름 | 이전 탭 아이템으로 교체 + 이전 수량 적용 |
+| 이전 탭과 아이템이 같음 | 이전 수량 방향으로 ±5% 소폭 조정 |
+| 변경량 = 0 (동일 수량) | ±3% 결정적 조정 (짝수행 +3%, 홀수행 -3%) |
+| 이력 없는 신규 섹션(갭) | ±3% 결정적 조정 |
+| 최솟값 보장 | 모든 수량 `max(1, new_q)` |
+
+```python
+# 섹션 정렬 비교 예시
+col_pair_counter = {}  # (ic, qc) → nth 등장 횟수
+# 참조 탭에서 nth번 등장하는 (ic, qc) 쌍 → 이전 탭에서도 nth번 쌍과 매핑
+```
+
+### 보상 셀 하이라이트 (`highlight_reward_diffs`)
+- 기준: 신규 탭을 참조 탭(ref_snap)과 비교
+- 변경된 보상 셀에만 연주황(FFD966) 배경색 적용
+- 날짜·텍스트 변경 셀에는 하이라이트 없음
+
+```python
+FILL_REWARD = PatternFill(start_color="FFD966", end_color="FFD966", fill_type="solid")
+```
+
+---
+
+## 이벤트 구성 패턴 분석 (`server.py`)
+
+### `_analyze_event_composition()` 동작
+1. 참조 탭의 이벤트 타입 목록 추출 (B열 기준)
+2. 동일 타입 이력 탭 2개 이상 수집 (부족 시 분석 스킵)
+3. 전체 등장 빈도 계산
+
+### 이벤트 분류 기준
+
+| 분류 | 기준 | 화면 표시 |
+|---|---|---|
+| 필수 이벤트 | 100% 등장 | 📋 매 주기 포함 |
+| 선택적 이벤트 | 등장률 < 100%, 현재 참조 탭에 있음 | ⚠️ 가끔 빠짐 |
+| 추가 가능 이벤트 | 과거 등장, 현재 참조 탭에 없음 | 💡 추가 여부 질문 |
+
+### STEP 4 사용자 답변 파싱 규칙
+
+| 사용자 입력 예시 | 처리 결과 |
+|---|---|
+| "모두 진행" / "그대로" / "그대로 진행" | 선택적 이벤트 전부 유지 |
+| "pvp 이벤트만 진행" | PvP 제외 나머지 선택적 이벤트 제거 |
+| "모두 적용" / "전부 추가" | 추가 가능 이벤트 전부 추가 |
+| 특정 이벤트명 언급 | 해당 이벤트만 추가 |
+
+### 이벤트 섹션 조작
+
+**제거** (`_remove_event_sections`):
+- B열 기준으로 섹션 시작/끝 행 탐지
+- 역순으로 행 블록 삭제 (행 번호 밀림 방지)
+
+**추가** (`_add_event_sections`):
+- 이력 탭에서 해당 이벤트 섹션 탐색
+- 스타일(font, fill, border, alignment) 포함 복사
+- 신규 탭 끝에 추가
+
+---
+
+## 이벤트 명칭 자동 갱신 (`scripts/generate_event_names.py`)
+
+### STABLE / CHANGEABLE 기반 처리
 
 ```
 소스 xlsx 전체 날짜형 탭 스캔
@@ -300,11 +244,9 @@ _get_base_pattern()으로 시즌 키워드 제거 → 기본 패턴 추출
     ↓
 기본 패턴별 실제 제목 변형 집계
     ↓
-변형 1개 → STABLE (모든 탭에서 동일) → 절대 변경 안 함
+변형 1개 → STABLE (절대 변경 안 함)
 변형 2개↑ → CHANGEABLE → 키워드 교체 or 시즌 접두어 삽입
 ```
-
-**처리 규칙**:
 
 | 상황 | 처리 |
 |------|------|
@@ -313,164 +255,36 @@ _get_base_pattern()으로 시즌 키워드 제거 → 기본 패턴 추출
 | CHANGEABLE + 시즌 키워드 없음 + 월 다름 | `N. 시즌키워드 텍스트` 형식으로 접두어 삽입 |
 | CHANGEABLE + 같은 달 | 변경 안 함 |
 
-- 선택 결과를 `event_names_config.json`에 저장
-- `create_tabs.py` 재실행으로 명칭 반영
-
 ---
 
-### 이벤트 보상 수정 (자동 추천 강화)
-
-> **[변경]** Phase 1.6 학습 결과 기반으로 신뢰도 HIGH 항목은 자동 확정하고,
-> 신뢰도 LOW 항목만 요청자에게 검토를 요청한다.
-
-**실행 순서**:
-
-```bash
-# 1. (Phase 1에서 이미 실행됨 — 재실행 스킵)
-# reward_by_event.json 사용
-
-# 2. 신규 탭 현재 보상 스캔
-python scripts/scan_rewards_by_event.py "{output_xlsx}" \
-    output/event-planner/work/reward_new_tabs.json
-
-# 3. 보상 추천 생성 (학습 기반 자동 추천)
-python scripts/recommend_rewards.py \
-    --history output/event-planner/work/reward_by_event.json \
-    --draft output/event-planner/work/draft_events.json \
-    --auto-confirm-high   # HIGH 신뢰도 항목 자동 확정
-
-# 4. LOW 신뢰도 항목만 검토 큐 생성
-python scripts/_prep_sequential_review.py --low-confidence-only
-
-# 5. LOW 신뢰도 이벤트만 순차 검토
-python scripts/recommend_rewards.py --per-event --low-only
-```
-
-**섹션별 제시 형식** (LOW 신뢰도 항목만 표시):
-```
-════════════════════════════════════════════════════════
-[보상 검토 필요] {탭명} 탭  (자동 확정: {N}개 / 검토 필요: {M}개)
-════════════════════════════════════════════════════════
-
- [{n}/{M}] {이벤트 제목}  ← LOW 신뢰도 항목만
-  유형: {event_type}  │  학습 기준: {basis}
-  ────────────────────────────────────────────
-  보상 아이템          │  학습avg  │  추천     │  신뢰도
-  ────────────────────────────────────────────
-  골드                 │ 500,000  │ 520,000  │ ✅ 자동확정
-  다이아               │      50  │      80  │ ⚠ 검토필요 (range이탈)
-  ────────────────────────────────────────────
-
-→ 수정 방법:
-   '아이템명 수량'   예) '다이아 60'
-   '추천 수량으로'  — 추천값 그대로 적용
-   '건너뜀'
-```
-
-**판정 유형**:
-| 아이콘 | action | 처리 |
-|---|---|---|
-| ✅ | 자동확정 | 학습 기준 내 → 요청자 확인 없이 적용 |
-| ⚠ | 검토필요 | range 이탈·신규 아이템 → 순차 검토 |
-| ↑ | 상향_권장 | 추천 수량으로 상향 (검토 큐 포함) |
-| ↓ | 하향_검토 | 하향 검토 권장 (검토 큐 포함) |
-| 📝 | 명칭_검토 | 수동 직접 입력 필요 |
-
-**보상 변경 적용**:
-```bash
-python scripts/apply_reward_changes.py \
-    --xlsx "{output_xlsx}" \
-    --changes "{changes_json}"
-```
-
----
-
-### 이벤트 패턴 갭 분석
-
-보상 추천·승인 완료 직후 실행:
-
-```bash
-python scripts/analyze_event_patterns.py \
-    "{source_xlsx}" \
-    "{output_xlsx}" \
-    "{탭명1},{탭명2}"
-```
-
-**갭 분석 출력 형식**:
-```
-[이벤트 패턴 갭 분석] — {장르} / {대상월} / {탭명} 탭
-────────────────────────────────────────────────────
- 이벤트 유형     | 역사 등장률         | 이번 탭 | 우선순위
-────────────────────────────────────────────────────
- 출석_이벤트     | ████ 100% (21/21)  | ✅ 있음 | —
- 던전_이벤트     | ███○  52% (11/21)  | ❌ 없음 | ⚠ 추가 권장
- 할인_이벤트     | █○○○  29% ( 6/21)  | ❌ 없음 | 〇 선택 사항
-────────────────────────────────────────────────────
-```
-
-**우선순위 분류**:
-| 등장률 | 분류 | 처리 |
-|---|---|---|
-| ≥ 80% | ❗ 누락 확인 필요 | 건너뜀 선택 시에도 경고 출력 |
-| 50~80% | ⚠ 추가 권장 | 추가 응답의 기본 대상 |
-| 30~50% | 〇 선택 사항 | 전체 추가 응답 시 포함 |
-| < 30% | (표시 없음) | 자동 추천 제외 |
-
----
-
-### Phase 3 — 인터랙티브 검토
-
-이벤트를 1개씩 순차 제시한다:
+## 전체 파이프라인 실행 흐름
 
 ```
-─────────────────────────────────────────
-[N/전체] {이벤트명}  (제목 후보: {후보1} / {후보2})
-  기간: {시작일} ~ {종료일}  [학습 기반 자동배치]
-  카테고리: {카테고리}
-  보상: {보상 내용}  (자동확정: {N}개 / 검토완료: {M}개)
-  상세: {상세 내용}
-
-→ 유지 / 수정할 항목과 내용을 입력해주세요.
-─────────────────────────────────────────
-```
-
-**분기 조건**:
-- 이벤트 추가 요청 → 새 항목 생성 후 검토 큐에 추가
-- 이벤트 삭제 요청 → 해당 항목 제거 후 다음으로 진행
-- `"전체 확정"` 입력 → Phase 4 진입
-
-**산출물**: `output/event-planner/work/confirmed_events.json`
-
----
-
-### Phase 4 — 출력
-
-```bash
-python scripts/upload_to_gsheets.py \
-    --xlsx "{output_xlsx}" \
-    --confirmed "output/event-planner/work/confirmed_events.json"
-```
-
-**산출물**: 신규 Google Sheets URL 또는 xlsx 파일 경로
-
-**성공 기준**:
-- 신규 시트/파일 생성 완료
-- 모든 이벤트 행 기록 완료
-- 기존 양식 일치
-
-**실패 처리**: API 오류 → 자동 재시도 최대 3회 / 권한 오류 → 에스컬레이션
-
----
-
-### 완료 후 학습 저장
-
-> 다음 실행 시 더 빠르고 정확하게 추천할 수 있도록 이번 결과를 캐시에 저장한다.
-
-```bash
-python scripts/save_learning.py \
-    --append-names output/event-planner/work/confirmed_events.json \
-    --append-rewards output/event-planner/work/reward_new_tabs.json \
-    --append-schedule output/event-planner/work/schedule_patterns.json
+[STEP 1~4: 대화 수집 완료]
+    │
+    ▼
+1. generate_event_names.py
+   - 이벤트 제목 패턴 생성
+   - 블랙리스트 필터링 적용
+    │
+    ▼
+2. create_tabs.py
+   - 참조 탭 복사
+   - 날짜/텍스트 치환
+   - 보상 패턴 자동 변경 + 하이라이트
+   - 이벤트 섹션 제거/추가 적용
+    │
+    ▼
+3. scan_rewards_by_event.py
+   - 신규 탭 보상 스캔
+    │
+    ▼
+4. recommend_rewards.py
+   - 보상 추천 생성 (이력 기반)
+    │
+    ▼
+5. save_learning.py
+   - 학습 데이터 누적
 ```
 
 ---
@@ -479,74 +293,40 @@ python scripts/save_learning.py \
 
 | 파일 | 경로 |
 |---|---|
-| 열 구조·포맷 | `output/event-planner/work/template.json` |
-| 월별 통계 | `output/event-planner/work/history_stats.json` |
-| 이벤트 명칭 패턴 | `output/event-planner/work/historical_event_names.json` |
-| 일정 패턴 학습 | `output/event-planner/work/schedule_patterns.json` |
-| 이벤트 초안 | `output/event-planner/work/draft_events.json` |
-| 확정 기획안 | `output/event-planner/work/confirmed_events.json` |
-| 키워드·이벤트명 설정 | `output/event-planner/work/event_names_config.json` |
-| 보상 역사 패턴 (요약) | `output/event-planner/work/reward_by_event.json` |
-| 보상 추천 결과 | `output/event-planner/work/reward_recommendation.json` |
-| 순차 리뷰 큐 | `output/event-planner/work/reward_review_queue.json` |
-| 최종 xlsx | `output/event-planner/file/{project_id}_output.xlsx` |
+| 에이전트 입력 | `output/handoff/event-planner_input.json` |
+| 이벤트 명칭 설정 | `output/event-planner/work/event_names_config.json` |
+| 보상 이력 패턴 | `output/event-planner/work/reward_by_event.json` |
+| 최종 xlsx | `output/event-planner/file/이벤트기획_{YYYYMMDD}.xlsx` |
+| 학습 데이터 | `output/learnings/learnings.json` |
+| 인사이트 리포트 | `output/learnings/insights.md` |
+| 개선 이력 | `output/learnings/improvement_log.jsonl` |
 
 ---
 
-## 상태 전이
+## 서버 접속 정보
 
-```
-IDLE
-  │
-  ▼
-[START] agent_config.json 로드
-  ├─ default_genre 있음 ──────────────────────────────────┐
-  └─ default_genre 없음 → GENRE_SELECTING                 │
-        │                                                   │
-        ▼                                                   │
-      장르 입력 → agent_config.json 저장                   │
-        │                                                   │
-        └───────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-                          KEYWORD_GENERATING (LLM JSON 강제 모드)
-                                    │
-                                    ▼
-                          KEYWORD_CONFIRMING (모두사용 / 번호 / 직접입력)
-                                    │
-                                    ▼
-                          REF_TABS_COLLECTING (화살표 / 한국어 / 자동매핑)
-                                    │
-                                    ▼
-                          PIPELINE_RUNNING
-                          (generate_event_names → create_tabs →
-                           scan_rewards → recommend_rewards →
-                           analyze_patterns → save_learning)
-                                    │
-                                    ▼
-                                  DONE
-```
-
-> **서버 상태 머신**: 대화 흐름은 LLM 없이 서버가 직접 관리. LLM은 키워드 생성 1회만 사용.
-
-세션 중단 시 `confirmed_events.json`에 진행 상태를 저장해 재개를 지원한다.
+| 환경 | 주소 |
+|---|---|
+| 로컬 | `http://localhost:5050` |
+| 사내망 | `http://{내부IP}:5050` |
+| 포트 | TCP 5050 (Windows 방화벽 인바운드 허용 설정됨) |
 
 ---
 
 ## 에스컬레이션 기준
 
-- 파일 접근 불가 (권한 오류, 경로 오류)
-- Phase 1 열 구조 파악 재시도 1회 실패
-- Phase 2 이벤트 생성 재시도 2회 초과
-- Phase 4 API 재시도 3회 초과
+- 소스 파일 경로 없음 또는 접근 불가
+- create_tabs.py 탭 생성 실패
+- Claude CLI / Anthropic / Ollama 모두 응답 없음 (키워드 폴백 사용)
+- 이벤트 구성 추가 대상 섹션을 이력 탭에서 찾을 수 없음
 
 에스컬레이션 시 PM에게 오류 원인과 필요한 조치를 명시해 보고한다.
 
 ---
 
-## 🧠 자기학습 워크플로우
+## 🧠 자기학습 시스템
 
-### 학습 수집 단계 (매 작업 완료 시 자동 실행)
+### 학습 수집 (매 작업 완료 시 자동 실행)
 
 ```
 [작업 완료]
@@ -555,65 +335,26 @@ IDLE
 [L1] 세션 데이터 수집
     - 입력: genre, market, new_tabs, ref_tabs, keywords
     - 결과: success/fail, 실행 시간, 오류 메시지
-    - 보상: reward_comparison.json 요약 (있는 경우)
     │
     ▼
 [L2] 패턴 학습
-    ├─ 장르별 키워드 풀 업데이트 (genre_keywords)
-    ├─ 참조 탭 날짜 차이 패턴 기록 (ref_tab_patterns)
-    ├─ 오류 유형 카운트 누적 (common_errors)
-    ├─ 보상 기준선 업데이트 (reward_baselines)
-    └─ 파이프라인 실행시간 기록 (pipeline_durations)
+    ├─ 장르별 키워드 풀 업데이트
+    ├─ 참조 탭 패턴 기록
+    ├─ 오류 유형 카운트 누적
+    └─ 보상 기준선 업데이트
     │
     ▼
 [L3] 개선 제안 자동 도출
-    - 오류 반복 시: 관련 로직 강화 제안
-    - 키워드 풀 충분히 쌓이면: 자동 추천 활성화 신호
-    - 실행 시간 과다 시: 병렬 처리 최적화 제안
     │
     ▼
-[L4] 저장
-    - output/learnings/learnings.json (구조화 데이터)
-    - output/learnings/insights.md (사람이 읽을 수 있는 리포트)
-    - output/learnings/improvement_log.jsonl (이력 로그)
+[L4] 저장 → output/learnings/
 ```
-
-### 학습 적용 단계 (매 작업 시작 시 자동 실행)
-
-```
-[새 요청 수신]
-    │
-    ▼
-[A1] 누적 인사이트 로드
-    - 장르에 맞는 추천 키워드 (suggested_keywords)
-    - 최근 미적용 개선 제안 (recent_improvements)
-    - 평균 파이프라인 소요 시간
-    │
-    ▼
-[A2] 에이전트 프롬프트에 주입
-    - "학습된 키워드 추천 - {genre} 장르: ..." 섹션 추가
-    - 개선 제안이 있으면 에이전트에게 전달
-    │
-    ▼
-[A3] 개선된 경험으로 작업 진행
-    - 키워드 제안 시 누적 데이터 기반 우선 추천
-    - 반복 오류 패턴 사전 방지
-```
-
-### 학습 파일 위치
-
-| 파일 | 용도 |
-|---|---|
-| `output/learnings/learnings.json` | 구조화된 패턴 데이터 (JSON) |
-| `output/learnings/insights.md` | 사람이 읽을 수 있는 인사이트 요약 |
-| `output/learnings/improvement_log.jsonl` | 세션별 개선 제안 이력 |
-| `scripts/learning_manager.py` | 학습 매니저 구현체 |
 
 ### 자동 개선 조건
 
-| 조건 | 트리거 | 조치 |
-|---|---|---|
-| 동일 오류 3회 이상 | error_count >= 3 | 개선 제안 → 프론트엔드 알림 |
-| 장르 키워드 20개 이상 누적 | len(genre_keywords) >= 20 | 자동 추천 활성화 신호 |
-| 평균 실행시간 120초 초과 | avg_duration > 120s | 병렬 처리 최적화 제안 |
-| 파이프라인 성공 10회 | session_count % 10 == 0 | 인사이트 리포트 자동 갱신 |
+| 조건 | 조치 |
+|---|---|
+| 동일 오류 3회 이상 | 개선 제안 → 프론트엔드 알림 |
+| 장르 키워드 20개 이상 누적 | 자동 추천 활성화 |
+| 평균 실행 시간 120초 초과 | 최적화 제안 |
+| 파이프라인 성공 10회 | 인사이트 리포트 자동 갱신 |
