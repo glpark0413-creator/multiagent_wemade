@@ -875,6 +875,50 @@ def _find_event_section_in_history(wb, source_tab: str, event_type: str):
     return None
 
 
+def _fix_coupon_end_date(ws, row_start: int, row_end: int, tab: str):
+    """
+    쿠폰이벤트 섹션의 진행 기간 종료일을 tab이 속한 달의 말일로 덮어쓴다.
+    예) tab='260625' → 월=6 → 말일=30 → 종료일을 06/30으로 교체
+    패턴: '∎ 진행 기간 : MM/DD(...) HH:MM ~ MM/DD(...) HH:MM:SS ...'
+    """
+    import re as _re
+    import calendar as _cal
+
+    # tab에서 연/월 파싱
+    try:
+        year  = 2000 + int(tab[:2])
+        month = int(tab[2:4])
+    except Exception:
+        return
+
+    last_day = _cal.monthrange(year, month)[1]
+    new_end_mmdd = f"{month:02d}/{last_day:02d}"
+
+    # 진행 기간 행 탐색 (B열 또는 C열에 '진행 기간' 포함)
+    _period_pat = _re.compile(
+        r'(.*~\s*)(\d{1,2}/\d{1,2})(.*)',  # ~ 이후 MM/DD 캡처
+        _re.DOTALL
+    )
+
+    for row in range(row_start, row_end + 1):
+        for col in range(1, ws.max_column + 1):
+            cell = ws.cell(row=row, column=col)
+            v = cell.value
+            if not isinstance(v, str):
+                continue
+            if "진행 기간" not in v:
+                continue
+            m = _period_pat.search(v)
+            if not m:
+                continue
+            old_end_mmdd = f"{int(m.group(2).split('/')[0]):02d}/{int(m.group(2).split('/')[1]):02d}"
+            if old_end_mmdd == new_end_mmdd:
+                continue  # 이미 말일이면 스킵
+            new_v = v[:m.start(2)] + new_end_mmdd + v[m.end(2):]
+            cell.value = new_v
+            print(f"  [쿠폰 말일 적용] row{row} col{col}: '{old_end_mmdd}' → '{new_end_mmdd}' (월 말일)")
+
+
 def _add_event_sections(ws_new, wb_src, source_tab: str, event_types: list,
                         new_tab: str = ""):
     """
@@ -914,17 +958,17 @@ def _add_event_sections(ws_new, wb_src, source_tab: str, event_types: list,
         print(f"  [이벤트 추가] '{etype}' 섹션: {from_tab}탭에서 {count}행 복사 → {dest_start}행~")
 
         # ── 날짜 시프트: from_tab → new_tab 날짜 맵 생성 후 복사된 행에 적용 ──
-        # new_tab이 없으면 source_tab(ref_tab)을 기준으로 시프트
         date_target = new_tab if new_tab else source_tab
         date_map = _auto_date_map(from_tab, date_target)
         if date_map:
-            # 복사된 행 범위만 대상으로 apply_replacements 호출
-            # apply_replacements는 ws 전체를 순회하므로 임시 ws slice 방식 대신
-            # 복사된 행 범위의 셀만 직접 처리
             _apply_date_map_to_rows(ws_new, dest_start, dest_start + count - 1, date_map)
             print(f"  [날짜 갱신] '{etype}': {from_tab} → {date_target} ({len(date_map)}개 맵핑 적용)")
         else:
             print(f"  [날짜 갱신 스킵] '{etype}': {from_tab} → {date_target} 날짜 맵 없음")
+
+        # ── 이벤트 유형별 특수 날짜 규칙 적용 ───────────────────────────────
+        if etype == "쿠폰이벤트":
+            _fix_coupon_end_date(ws_new, dest_start, dest_start + count - 1, date_target)
 
         added += count
 
