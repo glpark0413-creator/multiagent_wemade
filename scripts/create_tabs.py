@@ -399,9 +399,8 @@ def apply_balanced_rewards(ws_new, history_list: list) -> int:
         col_pair_counter[pair_key] = sec_idx + 1
 
         prv_matches = prv_hdr_map.get(pair_key, [])
-        if sec_idx >= len(prv_matches):
-            continue
-        prv_h = prv_matches[sec_idx]
+        has_mapping = sec_idx < len(prv_matches)
+        prv_h = prv_matches[sec_idx] if has_mapping else None
 
         offset = 1
         while True:
@@ -412,7 +411,31 @@ def apply_balanced_rewards(ws_new, history_list: list) -> int:
                 offset += 1
                 continue
 
-            cur_qv  = ws_new.cell(new_h + offset, qc).value  # 현재 수량 (= 참조 탭)
+            cur_qv = ws_new.cell(new_h + offset, qc).value   # 현재 수량
+
+            if not has_mapping:
+                # ── 매핑 없는 섹션: 행 번호 기반 ±3% 결정적 조정 ──────────────
+                # (이전 이력 없는 신규 섹션도 일관된 변화 적용)
+                if cur_qv is not None and cur_qv not in _SKIP:
+                    try:
+                        ref_q = float(cur_qv)
+                        sign  = 1 if (new_h + offset) % 2 == 0 else -1
+                        step  = max(1, int(round(ref_q * 0.03)))
+                        new_q = ref_q + sign * step
+                        if isinstance(cur_qv, int) or (
+                                isinstance(cur_qv, float) and cur_qv == int(cur_qv)):
+                            new_q = int(round(new_q))
+                        else:
+                            new_q = round(new_q, 4)
+                        new_q = max(1, new_q)   # 보상 수량 최솟값 1 보장
+                        if new_q != cur_qv:
+                            ws_new.cell(new_h + offset, qc).value = new_q
+                            qty_changed += 1
+                    except (ValueError, TypeError):
+                        pass
+                offset += 1
+                continue
+
             prv_iv  = ws_prv.cell(prv_h + offset, ic).value  # 이전 탭 아이템
             prv_qv  = ws_prv.cell(prv_h + offset, qc).value  # 이전 탭 수량
 
@@ -438,25 +461,23 @@ def apply_balanced_rewards(ws_new, history_list: list) -> int:
                         ref_q = float(cur_qv)
                         prv_q = float(prv_qv)
                         diff  = prv_q - ref_q
-                        # 역사 데이터와 차이가 없으면 → 행 번호 기반 결정적 소폭 조정
-                        # (같은 탭이 반복 생성돼도 동일 결과 보장)
+                        # 역사 데이터와 차이 없으면 → 행 번호 기반 결정적 소폭 조정
                         if abs(diff) < 1e-9:
-                            # 짝수 행: +3%, 홀수 행: -3% (최소 1 단위)
-                            sign = 1 if (new_h + offset) % 2 == 0 else -1
-                            step = max(1, int(round(ref_q * 0.03)))
+                            sign  = 1 if (new_h + offset) % 2 == 0 else -1
+                            step  = max(1, int(round(ref_q * 0.03)))
                             new_q = ref_q + sign * step
                         else:
                             # ref 기준 5% 이내로 소폭 이동
-                            step = ref_q * 0.05
-                            move = max(-step, min(step, diff * 0.5))
+                            step  = ref_q * 0.05
+                            move  = max(-step, min(step, diff * 0.5))
                             new_q = ref_q + move
 
-                        # 원래 타입으로 반올림
                         if isinstance(cur_qv, int) or (
                                 isinstance(cur_qv, float) and cur_qv == int(cur_qv)):
                             new_q = int(round(new_q))
                         else:
                             new_q = round(new_q, 4)
+                        new_q = max(1, new_q)   # 보상 수량 최솟값 1 보장
                         if new_q != cur_qv:
                             ws_new.cell(new_h + offset, qc).value = new_q
                             qty_changed += 1
