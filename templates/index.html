@@ -41,6 +41,38 @@
       <p class="subtitle">자연어로 요청하면 PM이 분석 후 에이전트를 자동 실행합니다.</p>
     </div>
 
+    <!-- ── 프로젝트 선택 ── -->
+    <div class="project-selector-card" id="project-selector-card">
+      <div class="project-selector-header">
+        <span class="project-selector-title">📁 프로젝트 선택</span>
+        <span class="project-selector-hint">작업할 프로젝트를 먼저 선택하세요</span>
+      </div>
+      <div class="project-btn-row" id="project-btn-row">
+        <!-- JS로 동적 생성 -->
+      </div>
+      <!-- 미설정 프로젝트 장르 설정 패널 (선택 시 표시) -->
+      <div id="project-setup-panel" class="project-setup-panel hidden">
+        <div class="project-setup-inner">
+          <span id="project-setup-label" class="project-setup-label"></span>
+          <div class="project-setup-fields">
+            <select id="project-genre-input" class="project-setup-input">
+              <option value="">장르 선택...</option>
+              <option value="야구">⚾ 야구</option>
+              <option value="축구">⚽ 축구</option>
+              <option value="농구">🏀 농구</option>
+              <option value="RPG">⚔️ RPG</option>
+              <option value="MMORPG">🏰 MMORPG</option>
+              <option value="캐주얼">🎮 캐주얼</option>
+              <option value="퍼즐">🧩 퍼즐</option>
+              <option value="전략">🗺️ 전략</option>
+            </select>
+            <button class="btn btn-primary btn-sm" onclick="saveProjectGenre()">저장 후 선택</button>
+            <button class="btn btn-secondary btn-sm" onclick="selectProjectWithoutGenre()">장르 없이 진행</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- AI 미설정 경고 -->
     <div id="pm-no-ai-banner" class="alert alert-warning hidden">
       ⚠️ <strong>ANTHROPIC_API_KEY</strong>가 설정되지 않았습니다.

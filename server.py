@@ -144,9 +144,60 @@ EP_WORK       = OUTPUT_DIR / "projects" / EP_PROJECT_ID / "work"
 EP_FILE       = OUTPUT_DIR / "projects" / EP_PROJECT_ID / "file"
 
 GL_DIR      = OUTPUT_DIR / "game-localizer"
-HANDOFF_DIR = OUTPUT_DIR / "handoff"
-JSON_DIR    = OUTPUT_DIR / "json"
-EP_CONFIG   = OUTPUT_DIR / "config" / "agent_config.json"
+HANDOFF_DIR  = OUTPUT_DIR / "handoff"
+JSON_DIR     = OUTPUT_DIR / "json"
+EP_CONFIG    = OUTPUT_DIR / "config" / "agent_config.json"
+PROJECT_CFG  = OUTPUT_DIR / "config" / "projects.json"
+
+# ── 프로젝트 기본 설정 ────────────────────────────────────────────────────────
+_DEFAULT_PROJECTS = {
+    "FB/GL": {
+        "display_name": "FB Global",
+        "genre":  "야구",
+        "market": "글로벌",
+        "configured": True,
+        "description": "야구 게임 (글로벌 마켓)"
+    },
+    "FB/JP": {
+        "display_name": "FB Japan",
+        "genre":  "",
+        "market": "일본",
+        "configured": False,
+        "description": "FB 일본 마켓"
+    },
+    "NC/KR": {
+        "display_name": "NC Korea",
+        "genre":  "",
+        "market": "한국",
+        "configured": False,
+        "description": "NC 한국 마켓"
+    },
+    "NC/GL": {
+        "display_name": "NC Global",
+        "genre":  "",
+        "market": "글로벌",
+        "configured": False,
+        "description": "NC 글로벌 마켓"
+    },
+}
+
+def _load_projects() -> dict:
+    """프로젝트 설정 로드 (없으면 기본값 반환)."""
+    try:
+        if PROJECT_CFG.exists():
+            saved = json.loads(PROJECT_CFG.read_text(encoding="utf-8"))
+            # 기본값에 저장된 값 병합 (새 프로젝트 추가 시 누락 방지)
+            merged = dict(_DEFAULT_PROJECTS)
+            for k, v in saved.items():
+                merged[k] = {**merged.get(k, {}), **v}
+            return merged
+    except Exception:
+        pass
+    return dict(_DEFAULT_PROJECTS)
+
+def _save_projects(projects: dict):
+    PROJECT_CFG.parent.mkdir(parents=True, exist_ok=True)
+    PROJECT_CFG.write_text(json.dumps(projects, ensure_ascii=False, indent=2), encoding="utf-8")
 
 sys.path.insert(0, str(SCRIPTS_DIR))
 
@@ -1039,22 +1090,34 @@ def _event_planner_agent(user_msg: str, history: list, context: dict, q: _queue_
 
     # ── START: 에이전트 시작 ───────────────────────────────────────────────
     if user_msg == "__agent_start__" or step == "start":
-        # 저장된 장르 불러오기 (학습된 값 우선)
+        # ① 프로젝트 설정에서 장르·마켓 자동 주입
+        project_id = context.get("project_id", "")
+        if project_id:
+            projects   = _load_projects()
+            proj_cfg   = projects.get(project_id, {})
+            if proj_cfg.get("genre") and not context.get("genre"):
+                context["genre"] = proj_cfg["genre"]
+            if proj_cfg.get("market") and not context.get("market"):
+                context["market"] = proj_cfg["market"]
+
+        # ② 저장된 장르 불러오기 (프로젝트 설정 → 학습 값 순)
         _cfg = _load_agent_config()
         genre = context.get("genre") or _cfg.get("default_genre", "")
 
         if genre:
-            # 장르 학습됨 → 장르 질문 생략, 바로 키워드 단계
+            # 장르 확정 → 장르 질문 생략, 바로 키워드 단계
             context["genre"] = genre
             context["_agent_step"] = "wait_keywords"
-            q.put({"type": "message", "content": f"**{genre}** 장르로 진행합니다. 키워드를 생성하는 중..."})
+            proj_label = f" [{project_id}]" if project_id else ""
+            q.put({"type": "message", "content": f"**{genre}** 장르{proj_label}로 진행합니다. 키워드를 생성하는 중..."})
             q.put({"type": "context_update", "context": context})
             all_kws, kw_msg = _llm_generate_keywords(genre, target_month)
             context["_suggested_keywords"] = all_kws
             _done(kw_msg)
         else:
             context["_agent_step"] = "wait_genre"
-            _done("어떤 장르의 게임인가요?\n(예: 야구, 축구, MMORPG, 캐주얼, 퍼즐)")
+            proj_label = f" [{project_id}]" if project_id else ""
+            _done(f"어떤 장르의 게임인가요?{proj_label}\n(예: 야구, 축구, MMORPG, 캐주얼, 퍼즐)")
         return
 
     # ── STEP 1: 장르 수집 (학습된 장르 없을 때만 실행) ─────────────────────
@@ -1977,6 +2040,38 @@ def localizer_download():
     if not p.exists() or not p.is_file():
         return jsonify(ok=False, message="파일이 없습니다."), 404
     return send_file(str(p), as_attachment=True, download_name=p.name)
+
+
+# ── 프로젝트 관리 API ──────────────────────────────────────────────────────────
+
+@app.route("/api/projects")
+def get_projects():
+    """프로젝트 목록 및 설정 반환."""
+    return jsonify(projects=_load_projects())
+
+
+@app.route("/api/project/config", methods=["POST"])
+def update_project_config():
+    """프로젝트 설정 업데이트 (장르, 마켓 등)."""
+    data       = request.json or {}
+    project_id = data.get("project_id", "")
+    projects   = _load_projects()
+
+    if project_id not in projects:
+        return jsonify(ok=False, message=f"알 수 없는 프로젝트: {project_id}")
+
+    # 허용 필드만 업데이트
+    for field in ("genre", "market", "display_name", "description"):
+        if field in data:
+            projects[project_id][field] = data[field]
+
+    # 장르·마켓 모두 설정됐으면 configured=True
+    p = projects[project_id]
+    if p.get("genre") and p.get("market"):
+        p["configured"] = True
+
+    _save_projects(projects)
+    return jsonify(ok=True, message="프로젝트 설정 저장 완료", project=p)
 
 
 # ── 실행 ──────────────────────────────────────────────────────────────────────

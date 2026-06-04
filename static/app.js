@@ -35,12 +35,19 @@ async function pmSend() {
   if (chatMode === 'pm') {
     pmHistory.push({ role: 'user', content: msg });
     endpoint = '/api/pm/chat';
-    body     = { message: msg, history: pmHistory };
+    // PM 채팅에도 현재 프로젝트 정보 포함
+    body = {
+      message: msg,
+      history: pmHistory,
+      project_id: currentProject || undefined,
+    };
   } else {
     agentHistory.push({ role: 'user', content: msg });
     const agentId = currentAgentId();
     endpoint = '/api/agent/chat';
-    body     = { agent: agentId, message: msg, history: agentHistory, context: agentContext };
+    // 에이전트 context에 항상 최신 프로젝트 정보 반영
+    if (currentProject) agentContext.project_id = currentProject;
+    body = { agent: agentId, message: msg, history: agentHistory, context: agentContext };
   }
 
   let data;
@@ -1414,6 +1421,170 @@ function _renderTabSelector(newTabs, availableTabs, container) {
   document.getElementById('chat-messages').scrollTop = 99999;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 프로젝트 선택
+// ═══════════════════════════════════════════════════════════════════════════
+
+let currentProject    = null;   // 현재 선택된 프로젝트 ID
+let projectsData      = {};     // 서버에서 로드한 프로젝트 설정
+let pendingProjectId  = null;   // 설정 중인 프로젝트 ID
+
+async function loadProjects() {
+  try {
+    const res  = await fetch('/api/projects');
+    const data = await res.json();
+    projectsData = data.projects || {};
+    renderProjectButtons();
+  } catch (e) {
+    console.warn('프로젝트 로드 실패:', e);
+  }
+}
+
+function renderProjectButtons() {
+  const row = document.getElementById('project-btn-row');
+  if (!row) return;
+  row.innerHTML = '';
+
+  Object.entries(projectsData).forEach(([id, cfg]) => {
+    const btn = document.createElement('button');
+    btn.className = 'project-btn' + (currentProject === id ? ' active' : '');
+    btn.dataset.projectId = id;
+
+    const isConfigured = cfg.configured;
+    const genre  = cfg.genre  ? `⚾ ${cfg.genre}`  : '장르 미설정';
+    const market = cfg.market ? `🌏 ${cfg.market}` : '';
+
+    btn.innerHTML = `
+      <span class="project-btn-id">${id}</span>
+      <span class="project-btn-desc">${cfg.display_name || id}</span>
+      <span class="project-btn-badge ${isConfigured ? 'configured' : 'unconfigured'}">
+        ${isConfigured ? `${genre}${market ? ' · ' + market : ''}` : '설정 필요'}
+      </span>
+    `;
+    btn.addEventListener('click', () => onProjectClick(id, cfg));
+    row.appendChild(btn);
+  });
+}
+
+function onProjectClick(id, cfg) {
+  if (!cfg.configured) {
+    // 장르 미설정 → 설정 패널 표시
+    pendingProjectId = id;
+    const panel = document.getElementById('project-setup-panel');
+    const label = document.getElementById('project-setup-label');
+    label.textContent = `[${id}] 장르를 설정해주세요`;
+    panel.classList.remove('hidden');
+
+    // 장르 select 초기화
+    const genreInput = document.getElementById('project-genre-input');
+    genreInput.value = cfg.genre || '';
+  } else {
+    // 설정 완료 → 즉시 선택
+    applyProjectSelection(id);
+  }
+}
+
+async function saveProjectGenre() {
+  const id    = pendingProjectId;
+  const genre = document.getElementById('project-genre-input').value;
+  if (!genre) { showToast('장르를 선택하세요.', 'warning'); return; }
+
+  try {
+    const res  = await fetch('/api/project/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_id: id, genre }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      projectsData[id] = { ...projectsData[id], ...data.project };
+      document.getElementById('project-setup-panel').classList.add('hidden');
+      showToast(`[${id}] 장르 저장 완료`, 'success');
+      renderProjectButtons();
+      applyProjectSelection(id);
+    }
+  } catch (e) {
+    showToast('저장 실패: ' + e.message, 'error');
+  }
+}
+
+function selectProjectWithoutGenre() {
+  const id = pendingProjectId;
+  document.getElementById('project-setup-panel').classList.add('hidden');
+  applyProjectSelection(id);
+}
+
+function applyProjectSelection(id) {
+  currentProject = id;
+  const cfg = projectsData[id] || {};
+
+  // 버튼 활성화 업데이트
+  renderProjectButtons();
+
+  // 사이드바 프로젝트 배지 업데이트
+  updateSidebarProjectBadge(id, cfg);
+
+  // 채팅 헤더 프로젝트 태그 업데이트
+  updateChatProjectTag(id);
+
+  // agentContext에 프로젝트 정보 주입 (에이전트 호출 시 자동 전달)
+  agentContext.project_id = id;
+  if (cfg.genre)  agentContext.genre  = cfg.genre;
+  if (cfg.market) agentContext.market = cfg.market;
+
+  // 이벤트 기획 탭의 마켓 셀렉트도 자동 설정
+  const marketSel = document.getElementById('ep-market');
+  if (marketSel && cfg.market) {
+    const opt = [...marketSel.options].find(o => o.value === cfg.market);
+    if (opt) marketSel.value = cfg.market;
+  }
+
+  // 장르 셀렉트 자동 설정
+  if (cfg.genre) {
+    const genreDetailSel = document.getElementById('ep-genre-detail');
+    if (genreDetailSel) {
+      const opt = [...genreDetailSel.options].find(o => o.value === cfg.genre);
+      if (opt) genreDetailSel.value = cfg.genre;
+    }
+  }
+
+  showToast(`프로젝트 [${id}] 선택됨`, 'success');
+
+  // 채팅 안내 메시지
+  addChatMsg('pm',
+    `✅ **[${id}]** 프로젝트가 선택됐습니다.\n` +
+    (cfg.genre  ? `- 장르: **${cfg.genre}**\n` : '') +
+    (cfg.market ? `- 마켓: **${cfg.market}**\n` : '') +
+    `\n이벤트 기획을 요청하면 해당 설정으로 자동 진행됩니다.`
+  );
+}
+
+function updateSidebarProjectBadge(id, cfg) {
+  let badge = document.getElementById('sidebar-project-badge');
+  if (!badge) {
+    badge = document.createElement('div');
+    badge.id = 'sidebar-project-badge';
+    badge.className = 'sidebar-project-badge';
+    const footer = document.querySelector('.sidebar-footer');
+    if (footer) footer.prepend(badge);
+  }
+  badge.innerHTML = `<span class="proj-label">현재 프로젝트</span>${id}`;
+}
+
+function updateChatProjectTag(id) {
+  const headerBar = document.querySelector('.chat-header-bar');
+  if (!headerBar) return;
+  let tag = document.getElementById('chat-project-tag');
+  if (!tag) {
+    tag = document.createElement('span');
+    tag.id = 'chat-project-tag';
+    tag.className = 'chat-project-tag';
+    headerBar.appendChild(tag);
+  }
+  tag.textContent = id;
+}
+
 // ── 초기 로드 ───────────────────────────────────────────────────────────────
 loadHomeFiles();
 checkGlossaryStatus();
+loadProjects();
