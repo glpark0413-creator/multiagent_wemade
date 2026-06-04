@@ -843,6 +843,152 @@ def _auto_ref_tabs(new_tabs: list, available_tabs: list) -> list:
     return result
 
 
+def _get_tab_event_types(wb, tab: str) -> set:
+    """워크시트 B열에서 이벤트 타입 집합 추출."""
+    from generate_event_names import detect_event_type, parse_section_title
+    import re as _re2
+    ws = wb[tab]
+    types = set()
+    for row in ws.iter_rows():
+        for cell in row:
+            if getattr(cell, "column", None) != 2:
+                continue
+            val = getattr(cell, "value", None)
+            if not val:
+                continue
+            t = parse_section_title(str(val).strip())
+            if t:
+                etype = detect_event_type(t)
+                if etype != "기타":
+                    types.add(etype)
+    return types
+
+
+def _analyze_event_composition(source: str, ref_tabs: list, available_tabs: list) -> dict | None:
+    """
+    동일 타입 이력 탭들의 이벤트 구성 패턴을 분석하여 선택적 이벤트 추천 메시지 반환.
+
+    반환:
+      None → 분석 불가 (이력 부족)
+      {
+        "message": str,          # 사용자에게 보여줄 추천 메시지
+        "analysis": {            # context에 저장할 분석 데이터
+            "mandatory": [...],
+            "optional_present": [...],
+            "optional_absent": [...],
+        }
+      }
+    """
+    if not source or not Path(source).exists():
+        return None
+
+    try:
+        import openpyxl as _xl
+        import re as _re2
+        from collections import Counter as _Counter
+
+        wb = _xl.load_workbook(source, read_only=True, data_only=True)
+        date_tabs = sorted([s for s in wb.sheetnames if _re2.fullmatch(r"\d{6}", s)])
+
+        if not ref_tabs:
+            return None
+
+        # 참조 탭의 이벤트 타입 파악
+        ref_tab = ref_tabs[0]
+        if ref_tab not in wb.sheetnames:
+            return None
+        ref_events = _get_tab_event_types(wb, ref_tab)
+
+        # 참조 탭과 같은 타입의 이력 탭 탐색
+        # (A타입: 포인트레이스/룰렛/빙고 / B타입: 출석/응모권/미션 등)
+        A_TYPE_MARKER = {"포인트레이스", "룰렛이벤트", "빙고이벤트"}
+        is_a_type = bool(ref_events & A_TYPE_MARKER)
+
+        same_type_tabs = []
+        for tab in date_tabs:
+            if tab == ref_tab:
+                continue
+            try:
+                etypes = _get_tab_event_types(wb, tab)
+                if not etypes:
+                    continue
+                tab_is_a = bool(etypes & A_TYPE_MARKER)
+                if tab_is_a == is_a_type:
+                    same_type_tabs.append((tab, etypes))
+            except Exception:
+                continue
+
+        wb.close()
+
+        if len(same_type_tabs) < 2:
+            # 이력 탭이 2개 미만 → 패턴 분석 불가
+            return None
+
+        total = len(same_type_tabs) + 1  # 참조 탭 포함
+
+        # 전체 등장 이벤트 빈도 계산 (참조 탭 포함)
+        all_events_seen: list = list(ref_events)
+        for _, etypes in same_type_tabs:
+            all_events_seen.extend(etypes)
+        freq = _Counter(all_events_seen)
+
+        # 분류
+        mandatory       = []   # 항상 등장 (100%)
+        optional_present = []  # 가끔 등장 + 현재 참조 탭에 있음
+        optional_absent  = []  # 과거에 있었지만 현재 참조 탭에 없음
+
+        for etype, cnt in sorted(freq.items(), key=lambda x: -x[1]):
+            rate = cnt / total
+            if rate >= 1.0:
+                mandatory.append({"type": etype, "rate": rate, "count": cnt})
+            elif etype in ref_events:
+                optional_present.append({"type": etype, "rate": rate, "count": cnt})
+            else:
+                optional_absent.append({"type": etype, "rate": rate, "count": cnt})
+
+        # 추천 대상 없으면 None
+        if not optional_present and not optional_absent:
+            return None
+
+        # 추천 메시지 생성
+        history_tabs_str = ", ".join(t for t, _ in same_type_tabs[:5])
+        lines = [
+            f"**이벤트 구성 패턴 분석** (분석 탭: {history_tabs_str})\n",
+            f"📋 **필수 이벤트** (매 주기 포함): "
+            + ", ".join(e["type"] for e in mandatory) if mandatory else "",
+        ]
+
+        if optional_present:
+            lines.append("\n⚠️ **선택적 이벤트** (현재 포함됨, 가끔 빠짐)")
+            for e in optional_present:
+                bar = "█" * int(e["rate"] * 5) + "░" * (5 - int(e["rate"] * 5))
+                lines.append(f"  - **{e['type']}** [{bar}] {e['count']}/{total}회 ({e['rate']:.0%})")
+
+        if optional_absent:
+            lines.append("\n💡 **추가 가능한 이벤트** (과거에 포함된 적 있음, 현재 없음)")
+            for e in optional_absent:
+                bar = "█" * int(e["rate"] * 5) + "░" * (5 - int(e["rate"] * 5))
+                lines.append(f"  - **{e['type']}** [{bar}] {e['count']}/{total}회 ({e['rate']:.0%})")
+            lines.append("\n위 이벤트를 이번 시트에 추가하시겠어요?")
+            lines.append("추가하려면 이벤트명을 입력하거나 **'그대로 진행'**을 말씀해 주세요.")
+        else:
+            lines.append("\n이대로 파이프라인을 시작할까요? (확인 또는 '그대로 진행')")
+
+        message = "\n".join(l for l in lines if l)
+        return {
+            "message": message,
+            "analysis": {
+                "mandatory":        mandatory,
+                "optional_present": optional_present,
+                "optional_absent":  optional_absent,
+            }
+        }
+
+    except Exception as e:
+        print(f"[이벤트 구성 분석 오류] {e}")
+        return None
+
+
 def _event_planner_agent(user_msg: str, history: list, context: dict, q: _queue_module.Queue):
     """이벤트 기획 에이전트 — 서버 상태 머신 기반 (LLM 불필요, 완전 오프라인)"""
 
@@ -965,9 +1111,27 @@ def _event_planner_agent(user_msg: str, history: list, context: dict, q: _queue_
             return
 
         context["ref_tabs"] = ref_tabs
+        context["_agent_step"] = "wait_event_composition"
+        q.put({"type": "context_update", "context": context})
+
+        # ── 이벤트 구성 패턴 분석 후 추천 메시지 생성 ──────────────────────
+        composition_msg = _analyze_event_composition(source, ref_tabs, available_tabs)
+        if composition_msg:
+            context["_composition_analysis"] = composition_msg["analysis"]
+            _done(composition_msg["message"])
+        else:
+            # 분석 데이터 부족 → 바로 파이프라인 실행
+            context["_agent_step"] = "done"
+            q.put({"type": "context_update", "context": context})
+            q.put({"type": "message", "content": "모든 정보가 준비됐습니다! 이벤트 기획 파이프라인을 시작합니다."})
+            _run_event_pipeline(context, q)
+        return
+
+    # ── STEP 4: 이벤트 구성 추천 확인 → 파이프라인 실행 ───────────────────
+    if step == "wait_event_composition":
         context["_agent_step"] = "done"
         q.put({"type": "context_update", "context": context})
-        q.put({"type": "message", "content": "모든 정보가 준비됐습니다! 이벤트 기획 파이프라인을 시작합니다. 🚀"})
+        q.put({"type": "message", "content": "확인했습니다! 이벤트 기획 파이프라인을 시작합니다."})
         _run_event_pipeline(context, q)
         return
 
