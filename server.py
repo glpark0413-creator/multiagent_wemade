@@ -1137,34 +1137,69 @@ def _event_planner_agent(user_msg: str, history: list, context: dict, q: _queue_
         optional_present = [e["type"] for e in analysis.get("optional_present", [])]
         optional_absent  = [e["type"] for e in analysis.get("optional_absent", [])]
 
-        events_to_remove = []  # 참조 탭에 있지만 제거할 이벤트
-        events_to_add    = []  # 참조 탭에 없지만 추가할 이벤트
+        events_to_remove = []
+        events_to_add    = []
 
-        msg_lower = user_msg.lower()
+        # ── 섹션별 분리 파싱 ─────────────────────────────────────────────
+        # 사용자 메시지를 줄별로 나눠 각 카테고리 컨텍스트를 분리한다.
+        # "1. 필수 이벤트 : 모두 진행"의 "모두 진행"이
+        # "선택적 이벤트" 처리에 오염되지 않도록 한다.
+        def _extract_section_text(msg: str, markers: list) -> str:
+            """markers 중 하나가 포함된 줄 이후의 텍스트(다음 번호 항목 전까지) 반환."""
+            import re as _re2
+            lines = msg.splitlines()
+            for i, line in enumerate(lines):
+                if any(m in line for m in markers):
+                    # 해당 줄 + 다음 번호 항목 전까지
+                    section_lines = [line]
+                    for j in range(i + 1, len(lines)):
+                        if _re2.match(r'^\s*\d+[.):\s]', lines[j]):
+                            break
+                        section_lines.append(lines[j])
+                    return " ".join(section_lines).lower()
+            return ""
+
+        selective_text = _extract_section_text(user_msg, ["선택적 이벤트", "선택 이벤트", "2."])
+        absent_text    = _extract_section_text(user_msg, ["추가 가능", "추가이벤트", "추가 이벤트", "3."])
+
+        # 섹션 분리 실패 시 (구조 없는 자유형 입력) → 전체 메시지 사용
+        if not selective_text:
+            selective_text = user_msg.lower()
+        if not absent_text:
+            absent_text = user_msg.lower()
+
+        _ALL_KEYWORDS = ["모두", "전부", "다 ", "전체", "진행", "적용", "추가"]
 
         # ── 선택적 이벤트 (optional_present) 처리 ────────────────────────
         if optional_present:
-            # "모두 진행" / "그대로" → 그대로 유지 (remove 없음)
-            # 특정 이벤트만 진행 → 나머지 remove
-            keep_all = any(k in user_msg for k in ["모두 진행", "전부 진행", "그대로 진행", "그대로", "모두 유지"])
+            # 선택적 섹션 텍스트 기준으로 keep_all 판단
+            keep_all = any(k in selective_text for k in ["모두 진행", "전부 진행", "그대로", "모두 유지", "전체 진행"])
             if not keep_all:
-                # 사용자가 언급한 이벤트 타입 찾기
-                mentioned = [e for e in optional_present if e.replace("이벤트", "").lower() in msg_lower
-                             or e.lower() in msg_lower]
+                mentioned = [e for e in optional_present
+                             if e.replace("이벤트", "").lower() in selective_text
+                             or e.lower() in selective_text]
                 if mentioned:
-                    # 언급된 것만 유지 → 나머지 제거
                     events_to_remove = [e for e in optional_present if e not in mentioned]
                 # else: 아무것도 언급 안 했으면 그대로 유지
 
         # ── 추가 가능 이벤트 (optional_absent) 처리 ─────────────────────
         if optional_absent:
-            add_all = any(k in user_msg for k in ["모두 적용", "전부 추가", "모두 추가", "다 추가", "다 적용"])
+            # "모두 진행" / "모두 적용" / "모두 추가" 등 모두 인식
+            add_all = (
+                any(k in absent_text for k in [
+                    "모두 적용", "전부 추가", "모두 추가", "다 추가", "다 적용",
+                    "다 넣", "전부 넣", "모두 넣", "다 포함", "전부 포함",
+                ])
+                or ("모두" in absent_text and any(k in absent_text for k in ["진행", "적용", "추가", "넣"]))
+                or ("전부" in absent_text and any(k in absent_text for k in ["진행", "적용", "추가", "넣"]))
+                or ("다" in absent_text and any(k in absent_text for k in ["넣어", "추가해", "적용해", "포함"]))
+            )
             if add_all:
                 events_to_add = list(optional_absent)
             else:
-                # 사용자가 이름을 직접 언급한 경우
-                events_to_add = [e for e in optional_absent if e.replace("이벤트", "").lower() in msg_lower
-                                 or e.lower() in msg_lower]
+                events_to_add = [e for e in optional_absent
+                                 if e.replace("이벤트", "").lower() in absent_text
+                                 or e.lower() in absent_text]
 
         context["_events_to_remove"] = events_to_remove
         context["_events_to_add"]    = events_to_add
