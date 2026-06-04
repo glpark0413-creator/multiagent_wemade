@@ -313,6 +313,12 @@ def _find_prev_same_type_ws(wb, ref_tab: str, ref_pairs: list) -> tuple:
 def _find_all_prev_same_type_ws(wb, ref_tab: str, ref_pairs: list) -> list:
     """
     ref_tab 이전의 동일 타입 탭을 모두 찾아 [(탭명, ws), ...] 최신→구버전 순으로 반환.
+
+    타입 판별 우선순위:
+      1. 일반 임계값(3): 열 쌍이 3개 이상 겹치면 동일 타입 (B타입 ↔ B타입)
+      2. A타입 임계값(1): 참조 탭과 후보 탭 모두 ic ≤ 4 (C열) 열 쌍을 가지고,
+         그 쌍이 1개 이상 겹치면 동일 A타입 (포인트레이스/룰렛/빙고 계열)
+         → B타입(ic=5,6,7) 탭이 A타입 탭으로 오매칭되는 것을 방지
     """
     import re as _re
     date_tabs = sorted(
@@ -320,6 +326,9 @@ def _find_all_prev_same_type_ws(wb, ref_tab: str, ref_pairs: list) -> list:
         reverse=True,
     )
     ref_col_sigs = {(ic, qc) for _, ic, qc in ref_pairs}
+    # 참조 탭의 A타입 시그니처: ic ≤ 4 (C열 이하) 열 쌍
+    ref_a_sigs = {(ic, qc) for ic, qc in ref_col_sigs if ic <= 4}
+
     past_ref = False
     result = []
     for tab in date_tabs:
@@ -331,8 +340,20 @@ def _find_all_prev_same_type_ws(wb, ref_tab: str, ref_pairs: list) -> list:
         ws = wb[tab]
         tab_pairs = _find_reward_col_pairs(ws)
         tab_col_sigs = {(ic, qc) for _, ic, qc in tab_pairs}
-        if len(ref_col_sigs & tab_col_sigs) >= 3:
+        overlap = ref_col_sigs & tab_col_sigs
+
+        # 방법 1: 일반 임계값 (B타입 ↔ B타입)
+        if len(overlap) >= 3:
             result.append((tab, ws))
+            continue
+
+        # 방법 2: A타입 매칭 (포인트레이스/룰렛/빙고 ↔ 동일 계열)
+        # 참조 탭이 A타입 시그니처를 가지고, 후보 탭과 A타입 열 쌍이 겹치면 매칭
+        if ref_a_sigs:
+            tab_a_sigs = {(ic, qc) for ic, qc in tab_col_sigs if ic <= 4}
+            if len(ref_a_sigs & tab_a_sigs) >= 1:
+                result.append((tab, ws))
+
     return result
 
 
@@ -411,20 +432,25 @@ def apply_balanced_rewards(ws_new, history_list: list) -> int:
                     qty_changed += 1
 
             else:
-                # 아이템이 같음 → 수량을 이전 방향으로 5% 소폭 이동
+                # 아이템이 같음 → 수량을 이전 방향으로 소폭 이동
                 if cur_qv is not None and prv_qv is not None and prv_qv not in _SKIP:
                     try:
                         ref_q = float(cur_qv)
                         prv_q = float(prv_qv)
                         diff  = prv_q - ref_q
-                        # 차이가 없으면 변경 불필요
+                        # 역사 데이터와 차이가 없으면 → 행 번호 기반 결정적 소폭 조정
+                        # (같은 탭이 반복 생성돼도 동일 결과 보장)
                         if abs(diff) < 1e-9:
-                            offset += 1
-                            continue
-                        # ref 기준 5% 이내로 소폭 이동
-                        step = ref_q * 0.05
-                        move = max(-step, min(step, diff * 0.5))
-                        new_q = ref_q + move
+                            # 짝수 행: +3%, 홀수 행: -3% (최소 1 단위)
+                            sign = 1 if (new_h + offset) % 2 == 0 else -1
+                            step = max(1, int(round(ref_q * 0.03)))
+                            new_q = ref_q + sign * step
+                        else:
+                            # ref 기준 5% 이내로 소폭 이동
+                            step = ref_q * 0.05
+                            move = max(-step, min(step, diff * 0.5))
+                            new_q = ref_q + move
+
                         # 원래 타입으로 반올림
                         if isinstance(cur_qv, int) or (
                                 isinstance(cur_qv, float) and cur_qv == int(cur_qv)):

@@ -301,6 +301,39 @@ def analyze_title_stability(wb) -> tuple[set, set]:
     return stable_titles, changeable_types
 
 
+# 이벤트 제목 접두어로 부적합한 단어 블랙리스트
+# (이 단어들이 키워드 풀에 포함되면 "이벤트의 플레이 미션 이벤트!" 같은 어색한 제목이 생성됨)
+_KW_BLACKLIST: set[str] = {
+    "이벤트", "시즌", "보상", "미션", "대회", "경기", "대결", "선수",
+    "챌린지", "클럽", "모임", "대전", "단전", "경기대회", "선수상",
+}
+# 이 단어들로 끝나는 복합어도 제외 (예: "야구대회", "야구경기")
+_KW_BLACKLIST_SUFFIX: tuple = ("대회", "경기", "대결", "대전", "단전", "클럽", "모임")
+
+
+def _is_valid_keyword(kw: str) -> bool:
+    """
+    이벤트 제목 접두어로 적합한 키워드인지 검증.
+    - 한국어 2글자 이상
+    - 영어/숫자 혼재 금지 (베이스런nings 등)
+    - 블랙리스트 단어 제외
+    - 지나치게 긴 단어 제외 (6글자 초과 단일어)
+    """
+    kw = kw.strip()
+    if not kw or len(kw) < 2:
+        return False
+    # 영어 혼재 제외 (한글+영어 혼합 키워드)
+    if re.search(r'[a-zA-Z]', kw):
+        return False
+    # 블랙리스트 완전 일치
+    if kw in _KW_BLACKLIST:
+        return False
+    # 블랙리스트 접미사로 끝나는 복합어 (단, 3글자 이상일 때만)
+    if len(kw) >= 3 and kw.endswith(_KW_BLACKLIST_SUFFIX):
+        return False
+    return True
+
+
 def _build_keyword_pool(target_m: int, genre_phrases: list, learned_kws: list) -> list:
     """
     이벤트 제목 변경에 사용할 중복 없는 키워드 풀 생성.
@@ -311,7 +344,7 @@ def _build_keyword_pool(target_m: int, genre_phrases: list, learned_kws: list) -
 
     def _add(kw: str):
         kw = kw.strip()
-        if kw and kw not in seen:
+        if kw and kw not in seen and _is_valid_keyword(kw):
             pool.append(kw)
             seen.add(kw)
 
