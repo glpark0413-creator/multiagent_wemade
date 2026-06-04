@@ -774,10 +774,23 @@ def _best_ref_tab(new_tab: str, existing: list) -> str:
     return existing[0]
 
 
+def _b_val_to_etype(val: str) -> str:
+    """B열 raw 값을 이벤트 유형명으로 변환. 'parse_section_title + detect_event_type' 사용."""
+    try:
+        from generate_event_names import parse_section_title, detect_event_type
+        title = parse_section_title(val)
+        if title:
+            return detect_event_type(title)
+    except Exception:
+        pass
+    return "기타"
+
+
 def _remove_event_sections(ws, event_types: list):
     """
     워크시트에서 지정한 이벤트 타입에 해당하는 행 구간을 삭제.
-    B열 값이 event_types 중 하나와 매치되는 행부터 다음 이벤트 시작 전까지 삭제.
+    B열 값을 parse_section_title + detect_event_type으로 유형 변환 후 매칭한다.
+    섹션 경계는 '이벤트 제목 :' 패턴이 있는 행 기준으로 구분한다.
     """
     if not event_types:
         return 0
@@ -785,41 +798,37 @@ def _remove_event_sections(ws, event_types: list):
     etypes_set = set(event_types)
     max_row = ws.max_row
 
-    # B열 값 스캔: (row, b_value) 목록
-    b_values = {}
+    # B열 스캔: '이벤트 제목 :' 패턴이 있는 행만 섹션 시작 후보로 수집
+    # → parse_section_title이 None이 아닌 행 (탭 헤더 제외, 진행기간/내용 등 제외)
+    section_rows = []  # (start_row, etype, raw_val)
+
     for row in range(1, max_row + 1):
         v = ws.cell(row=row, column=2).value
-        if v and isinstance(v, str) and v.strip():
-            b_values[row] = v.strip()
+        if not v or not isinstance(v, str):
+            continue
+        raw = v.strip()
+        etype = _b_val_to_etype(raw)
+        if etype != "기타":
+            section_rows.append((row, etype, raw))
 
-    # 이벤트 섹션 시작 행 탐지 (B열 값이 이벤트 타입인 행)
-    # 이벤트 구분을 위해 B열이 "기타"가 아닌 고유 이벤트 이름인 행을 섹션 시작으로 간주
-    # 섹션 끝 = 다음 섹션 시작 -1
-    section_starts = {}  # event_type → start_row
-    all_section_rows = []  # (start_row, event_type)
+    print(f"  [섹션 탐지] 총 {len(section_rows)}개 섹션: {[(r, e) for r, e, _ in section_rows]}")
 
-    for row, val in sorted(b_values.items()):
-        # 최초 등장 행만 섹션 시작으로 기록
-        if val not in section_starts:
-            section_starts[val] = row
-            all_section_rows.append((row, val))
-
-    # 제거 대상 섹션 범위 계산 (역순으로 삭제해야 행 번호가 밀리지 않음)
+    # 제거 대상 범위 계산 (역순 삭제)
     rows_to_delete = []
-    for i, (start_row, etype) in enumerate(all_section_rows):
+    for i, (start_row, etype, raw) in enumerate(section_rows):
         if etype not in etypes_set:
             continue
-        # 섹션 끝 = 다음 섹션 시작 - 1 (없으면 max_row)
-        end_row = all_section_rows[i + 1][0] - 1 if i + 1 < len(all_section_rows) else max_row
+        end_row = section_rows[i + 1][0] - 1 if i + 1 < len(section_rows) else max_row
         rows_to_delete.append((start_row, end_row, etype))
+        print(f"  [이벤트 제거 예정] '{etype}' ({raw[:30]}) : {start_row}~{end_row}행")
 
-    # 역순으로 행 삭제
+    # 역순 삭제 (행 번호 밀림 방지)
     deleted = 0
     for start_row, end_row, etype in reversed(rows_to_delete):
         count = end_row - start_row + 1
         ws.delete_rows(start_row, count)
         deleted += count
-        print(f"  [이벤트 제거] '{etype}' 섹션: {start_row}~{end_row}행 ({count}행) 삭제")
+        print(f"  [이벤트 제거 완료] '{etype}': {count}행 삭제")
 
     return deleted
 
@@ -827,14 +836,15 @@ def _remove_event_sections(ws, event_types: list):
 def _find_event_section_in_history(wb, source_tab: str, event_type: str):
     """
     소스 탭 이전의 이력 탭들에서 event_type 섹션 행들을 찾아 반환.
-    반환: (ws, start_row, end_row) 또는 None
+    B열 값을 parse_section_title + detect_event_type으로 유형 변환 후 매칭한다.
+    반환: (ws, start_row, end_row, tab_name) 또는 None
     """
     import re as _re2
+    # source_tab을 포함한 모든 탭 검색 (역순 — 최신부터)
     date_tabs = sorted([s for s in wb.sheetnames if _re2.fullmatch(r"\d{6}", s)], reverse=True)
-    # source_tab 이전 탭들만 검색
     try:
         src_idx = date_tabs.index(source_tab)
-        candidates = date_tabs[src_idx + 1:]
+        candidates = date_tabs[src_idx + 1:]  # source_tab 이전(오래된) 탭만
     except ValueError:
         candidates = date_tabs
 
@@ -843,24 +853,25 @@ def _find_event_section_in_history(wb, source_tab: str, event_type: str):
             ws = wb[tab]
         except Exception:
             continue
-        b_values = {}
+
+        # 섹션 시작 행 수집 (이벤트 유형으로 변환)
+        section_rows = []
         for row in range(1, ws.max_row + 1):
             v = ws.cell(row=row, column=2).value
-            if v and isinstance(v, str) and v.strip():
-                b_values[row] = v.strip()
+            if not v or not isinstance(v, str):
+                continue
+            raw = v.strip()
+            etype = _b_val_to_etype(raw)
+            if etype != "기타":
+                section_rows.append((row, etype))
 
-        all_section_rows = []
-        seen = {}
-        for row, val in sorted(b_values.items()):
-            if val not in seen:
-                seen[val] = row
-                all_section_rows.append((row, val))
-
-        for i, (start_row, etype) in enumerate(all_section_rows):
+        for i, (start_row, etype) in enumerate(section_rows):
             if etype == event_type:
-                end_row = all_section_rows[i + 1][0] - 1 if i + 1 < len(all_section_rows) else ws.max_row
+                end_row = section_rows[i + 1][0] - 1 if i + 1 < len(section_rows) else ws.max_row
+                print(f"  [이력 탐색] '{event_type}' → {tab}탭 {start_row}~{end_row}행 발견")
                 return ws, start_row, end_row, tab
 
+    print(f"  [이력 탐색] '{event_type}' → 모든 이력 탭에서 찾지 못함")
     return None
 
 
