@@ -875,12 +875,16 @@ def _find_event_section_in_history(wb, source_tab: str, event_type: str):
     return None
 
 
-def _add_event_sections(ws_new, wb_src, source_tab: str, event_types: list):
+def _add_event_sections(ws_new, wb_src, source_tab: str, event_types: list,
+                        new_tab: str = ""):
     """
     이력 탭에서 event_types 섹션을 찾아 ws_new 끝에 추가.
+    복사 후 from_tab → new_tab 날짜 시프트 맵으로 날짜/텍스트를 자동 갱신한다.
     """
     if not event_types:
         return 0
+
+    from copy import copy as _copy2
 
     added = 0
     for etype in event_types:
@@ -892,9 +896,7 @@ def _add_event_sections(ws_new, wb_src, source_tab: str, event_types: list):
         ws_hist, start_row, end_row, from_tab = result
         dest_start = ws_new.max_row + 1
 
-        from openpyxl.utils import get_column_letter
-        from copy import copy as _copy2
-
+        # ── 셀 복사 (값 + 스타일) ────────────────────────────────────────
         for src_row in range(start_row, end_row + 1):
             dest_row = dest_start + (src_row - start_row)
             for col in range(1, ws_hist.max_column + 1):
@@ -902,17 +904,72 @@ def _add_event_sections(ws_new, wb_src, source_tab: str, event_types: list):
                 dest_cell = ws_new.cell(row=dest_row, column=col)
                 dest_cell.value = src_cell.value
                 if src_cell.has_style:
-                    dest_cell.font      = _copy2(src_cell.font)
-                    dest_cell.fill      = _copy2(src_cell.fill)
-                    dest_cell.border    = _copy2(src_cell.border)
-                    dest_cell.alignment = _copy2(src_cell.alignment)
+                    dest_cell.font         = _copy2(src_cell.font)
+                    dest_cell.fill         = _copy2(src_cell.fill)
+                    dest_cell.border       = _copy2(src_cell.border)
+                    dest_cell.alignment    = _copy2(src_cell.alignment)
                     dest_cell.number_format = src_cell.number_format
 
         count = end_row - start_row + 1
-        added += count
         print(f"  [이벤트 추가] '{etype}' 섹션: {from_tab}탭에서 {count}행 복사 → {dest_start}행~")
 
+        # ── 날짜 시프트: from_tab → new_tab 날짜 맵 생성 후 복사된 행에 적용 ──
+        # new_tab이 없으면 source_tab(ref_tab)을 기준으로 시프트
+        date_target = new_tab if new_tab else source_tab
+        date_map = _auto_date_map(from_tab, date_target)
+        if date_map:
+            # 복사된 행 범위만 대상으로 apply_replacements 호출
+            # apply_replacements는 ws 전체를 순회하므로 임시 ws slice 방식 대신
+            # 복사된 행 범위의 셀만 직접 처리
+            _apply_date_map_to_rows(ws_new, dest_start, dest_start + count - 1, date_map)
+            print(f"  [날짜 갱신] '{etype}': {from_tab} → {date_target} ({len(date_map)}개 맵핑 적용)")
+        else:
+            print(f"  [날짜 갱신 스킵] '{etype}': {from_tab} → {date_target} 날짜 맵 없음")
+
+        added += count
+
     return added
+
+
+def _apply_date_map_to_rows(ws, row_start: int, row_end: int, date_map: dict):
+    """
+    ws의 row_start~row_end 행에만 날짜 시프트를 적용.
+    - datetime/date 객체: date_map으로 직접 변환
+    - str: date_map의 MM/DD 패턴을 찾아 치환
+    """
+    import re as _re
+    from datetime import datetime as _dt, date as _d
+
+    # 날짜 문자열 패턴 (MM/DD, M/DD, MM/D 등 포함)
+    _date_pat = _re.compile(r'\b(\d{1,2})/(\d{1,2})\b')
+
+    def _shift_str(s: str) -> str:
+        def _repl(m):
+            key = f"{int(m.group(1)):02d}/{int(m.group(2)):02d}"
+            return m.group(0).replace(
+                m.group(0),
+                date_map[key] if key in date_map else m.group(0)
+            )
+        return _date_pat.sub(_repl, s)
+
+    for row in range(row_start, row_end + 1):
+        for col in range(1, ws.max_column + 1):
+            cell = ws.cell(row=row, column=col)
+            if cell.value is None:
+                continue
+            if isinstance(cell.value, (_dt, _d)):
+                old = cell.value
+                mmdd = old.strftime("%m/%d")
+                if mmdd in date_map:
+                    nm, nd = map(int, date_map[mmdd].split("/"))
+                    if isinstance(old, _dt):
+                        cell.value = _dt(old.year, nm, nd, old.hour, old.minute, old.second)
+                    else:
+                        cell.value = _d(old.year, nm, nd)
+            elif isinstance(cell.value, str):
+                new_val = _shift_str(cell.value)
+                if new_val != cell.value:
+                    cell.value = new_val
 
 
 def _cli_main(source: str, output: str, new_tabs: list, ref_tabs: list,
@@ -994,7 +1051,7 @@ def _cli_main(source: str, output: str, new_tabs: list, ref_tabs: list,
             removed = _remove_event_sections(ws_new, events_to_remove)
             print(f"  [{new_tab}] 이벤트 섹션 제거: {removed}행")
         if events_to_add:
-            added = _add_event_sections(ws_new, wb, src, events_to_add)
+            added = _add_event_sections(ws_new, wb, src, events_to_add, new_tab=new_tab)
             print(f"  [{new_tab}] 이벤트 섹션 추가: {added}행")
 
         all_changes[new_tab] = changes
