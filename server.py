@@ -1131,7 +1131,53 @@ def _event_planner_agent(user_msg: str, history: list, context: dict, q: _queue_
     if step == "wait_event_composition":
         context["_agent_step"] = "done"
         q.put({"type": "context_update", "context": context})
-        q.put({"type": "message", "content": "확인했습니다! 이벤트 기획 파이프라인을 시작합니다."})
+
+        # 사용자 답변 파싱 → 이벤트 구성 지시 도출
+        analysis = context.get("_composition_analysis", {})
+        optional_present = [e["type"] for e in analysis.get("optional_present", [])]
+        optional_absent  = [e["type"] for e in analysis.get("optional_absent", [])]
+
+        events_to_remove = []  # 참조 탭에 있지만 제거할 이벤트
+        events_to_add    = []  # 참조 탭에 없지만 추가할 이벤트
+
+        msg_lower = user_msg.lower()
+
+        # ── 선택적 이벤트 (optional_present) 처리 ────────────────────────
+        if optional_present:
+            # "모두 진행" / "그대로" → 그대로 유지 (remove 없음)
+            # 특정 이벤트만 진행 → 나머지 remove
+            keep_all = any(k in user_msg for k in ["모두 진행", "전부 진행", "그대로 진행", "그대로", "모두 유지"])
+            if not keep_all:
+                # 사용자가 언급한 이벤트 타입 찾기
+                mentioned = [e for e in optional_present if e.replace("이벤트", "").lower() in msg_lower
+                             or e.lower() in msg_lower]
+                if mentioned:
+                    # 언급된 것만 유지 → 나머지 제거
+                    events_to_remove = [e for e in optional_present if e not in mentioned]
+                # else: 아무것도 언급 안 했으면 그대로 유지
+
+        # ── 추가 가능 이벤트 (optional_absent) 처리 ─────────────────────
+        if optional_absent:
+            add_all = any(k in user_msg for k in ["모두 적용", "전부 추가", "모두 추가", "다 추가", "다 적용"])
+            if add_all:
+                events_to_add = list(optional_absent)
+            else:
+                # 사용자가 이름을 직접 언급한 경우
+                events_to_add = [e for e in optional_absent if e.replace("이벤트", "").lower() in msg_lower
+                                 or e.lower() in msg_lower]
+
+        context["_events_to_remove"] = events_to_remove
+        context["_events_to_add"]    = events_to_add
+        q.put({"type": "context_update", "context": context})
+
+        summary_parts = []
+        if events_to_remove:
+            summary_parts.append(f"제거: {', '.join(events_to_remove)}")
+        if events_to_add:
+            summary_parts.append(f"추가: {', '.join(events_to_add)}")
+        summary = " / ".join(summary_parts) if summary_parts else "변경 없음"
+
+        q.put({"type": "message", "content": f"확인했습니다! ({summary}) 이벤트 기획 파이프라인을 시작합니다."})
         _run_event_pipeline(context, q)
         return
 
@@ -1247,10 +1293,16 @@ def _run_event_pipeline(params: dict, q: _queue_module.Queue):
 
     # ── 2단계: 탭 생성 ──────────────────────────────────────────────────────
     step("탭 생성")
+    events_to_remove = params.get("_events_to_remove", [])
+    events_to_add    = params.get("_events_to_add", [])
     cmd = [sys.executable, str(SCRIPTS_DIR / "create_tabs.py"),
            source, str(output_path), ",".join(new_tabs)]
     if ref_tabs:
         cmd.append(",".join(ref_tabs))
+    if events_to_remove:
+        cmd += ["--remove-events", ",".join(events_to_remove)]
+    if events_to_add:
+        cmd += ["--add-events", ",".join(events_to_add)]
     ok, log = run_script(cmd)
     if not ok:
         fail_step(f"탭 생성 실패:\n{log[:400]}")

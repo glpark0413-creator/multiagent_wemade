@@ -774,7 +774,138 @@ def _best_ref_tab(new_tab: str, existing: list) -> str:
     return existing[0]
 
 
-def _cli_main(source: str, output: str, new_tabs: list, ref_tabs: list):
+def _remove_event_sections(ws, event_types: list):
+    """
+    워크시트에서 지정한 이벤트 타입에 해당하는 행 구간을 삭제.
+    B열 값이 event_types 중 하나와 매치되는 행부터 다음 이벤트 시작 전까지 삭제.
+    """
+    if not event_types:
+        return 0
+
+    etypes_set = set(event_types)
+    max_row = ws.max_row
+
+    # B열 값 스캔: (row, b_value) 목록
+    b_values = {}
+    for row in range(1, max_row + 1):
+        v = ws.cell(row=row, column=2).value
+        if v and isinstance(v, str) and v.strip():
+            b_values[row] = v.strip()
+
+    # 이벤트 섹션 시작 행 탐지 (B열 값이 이벤트 타입인 행)
+    # 이벤트 구분을 위해 B열이 "기타"가 아닌 고유 이벤트 이름인 행을 섹션 시작으로 간주
+    # 섹션 끝 = 다음 섹션 시작 -1
+    section_starts = {}  # event_type → start_row
+    all_section_rows = []  # (start_row, event_type)
+
+    for row, val in sorted(b_values.items()):
+        # 최초 등장 행만 섹션 시작으로 기록
+        if val not in section_starts:
+            section_starts[val] = row
+            all_section_rows.append((row, val))
+
+    # 제거 대상 섹션 범위 계산 (역순으로 삭제해야 행 번호가 밀리지 않음)
+    rows_to_delete = []
+    for i, (start_row, etype) in enumerate(all_section_rows):
+        if etype not in etypes_set:
+            continue
+        # 섹션 끝 = 다음 섹션 시작 - 1 (없으면 max_row)
+        end_row = all_section_rows[i + 1][0] - 1 if i + 1 < len(all_section_rows) else max_row
+        rows_to_delete.append((start_row, end_row, etype))
+
+    # 역순으로 행 삭제
+    deleted = 0
+    for start_row, end_row, etype in reversed(rows_to_delete):
+        count = end_row - start_row + 1
+        ws.delete_rows(start_row, count)
+        deleted += count
+        print(f"  [이벤트 제거] '{etype}' 섹션: {start_row}~{end_row}행 ({count}행) 삭제")
+
+    return deleted
+
+
+def _find_event_section_in_history(wb, source_tab: str, event_type: str):
+    """
+    소스 탭 이전의 이력 탭들에서 event_type 섹션 행들을 찾아 반환.
+    반환: (ws, start_row, end_row) 또는 None
+    """
+    import re as _re2
+    date_tabs = sorted([s for s in wb.sheetnames if _re2.fullmatch(r"\d{6}", s)], reverse=True)
+    # source_tab 이전 탭들만 검색
+    try:
+        src_idx = date_tabs.index(source_tab)
+        candidates = date_tabs[src_idx + 1:]
+    except ValueError:
+        candidates = date_tabs
+
+    for tab in candidates:
+        try:
+            ws = wb[tab]
+        except Exception:
+            continue
+        b_values = {}
+        for row in range(1, ws.max_row + 1):
+            v = ws.cell(row=row, column=2).value
+            if v and isinstance(v, str) and v.strip():
+                b_values[row] = v.strip()
+
+        all_section_rows = []
+        seen = {}
+        for row, val in sorted(b_values.items()):
+            if val not in seen:
+                seen[val] = row
+                all_section_rows.append((row, val))
+
+        for i, (start_row, etype) in enumerate(all_section_rows):
+            if etype == event_type:
+                end_row = all_section_rows[i + 1][0] - 1 if i + 1 < len(all_section_rows) else ws.max_row
+                return ws, start_row, end_row, tab
+
+    return None
+
+
+def _add_event_sections(ws_new, wb_src, source_tab: str, event_types: list):
+    """
+    이력 탭에서 event_types 섹션을 찾아 ws_new 끝에 추가.
+    """
+    if not event_types:
+        return 0
+
+    added = 0
+    for etype in event_types:
+        result = _find_event_section_in_history(wb_src, source_tab, etype)
+        if result is None:
+            print(f"  [이벤트 추가 스킵] '{etype}' 섹션을 이력에서 찾을 수 없음")
+            continue
+
+        ws_hist, start_row, end_row, from_tab = result
+        dest_start = ws_new.max_row + 1
+
+        from openpyxl.utils import get_column_letter
+        from copy import copy as _copy2
+
+        for src_row in range(start_row, end_row + 1):
+            dest_row = dest_start + (src_row - start_row)
+            for col in range(1, ws_hist.max_column + 1):
+                src_cell  = ws_hist.cell(row=src_row, column=col)
+                dest_cell = ws_new.cell(row=dest_row, column=col)
+                dest_cell.value = src_cell.value
+                if src_cell.has_style:
+                    dest_cell.font      = _copy2(src_cell.font)
+                    dest_cell.fill      = _copy2(src_cell.fill)
+                    dest_cell.border    = _copy2(src_cell.border)
+                    dest_cell.alignment = _copy2(src_cell.alignment)
+                    dest_cell.number_format = src_cell.number_format
+
+        count = end_row - start_row + 1
+        added += count
+        print(f"  [이벤트 추가] '{etype}' 섹션: {from_tab}탭에서 {count}행 복사 → {dest_start}행~")
+
+    return added
+
+
+def _cli_main(source: str, output: str, new_tabs: list, ref_tabs: list,
+              events_to_remove: list = None, events_to_add: list = None):
     """서버 파이프라인에서 CLI 인수로 호출되는 진입점."""
     import re as _re, copy as _copy
     wb_tmp = openpyxl.load_workbook(source, read_only=True)
@@ -847,6 +978,14 @@ def _cli_main(source: str, output: str, new_tabs: list, ref_tabs: list):
         else:
             print(f"  [{new_tab}] 이전 동일 타입 탭 없음 → 보상 변경 생략")
 
+        # ── 이벤트 구성 조정 ────────────────────────────────────────────────
+        if events_to_remove:
+            removed = _remove_event_sections(ws_new, events_to_remove)
+            print(f"  [{new_tab}] 이벤트 섹션 제거: {removed}행")
+        if events_to_add:
+            added = _add_event_sections(ws_new, wb, src, events_to_add)
+            print(f"  [{new_tab}] 이벤트 섹션 추가: {added}행")
+
         all_changes[new_tab] = changes
         all_season_warnings[new_tab] = warn_season_keywords(ws_new, new_tab)
         print(f"  [{new_tab}] {src} 복사 완료, {len(changes)}개 셀 갱신")
@@ -874,10 +1013,22 @@ if __name__ == "__main__":
 
     # CLI 인수 있으면 동적 모드, 없으면 하드코딩 UPDATES 사용
     if len(sys.argv) >= 4:
-        _src      = sys.argv[1]
-        _out      = sys.argv[2]
-        _new_tabs = [t.strip() for t in sys.argv[3].split(",") if t.strip()]
-        _ref_tabs = [t.strip() for t in sys.argv[4].split(",") if t.strip()] if len(sys.argv) >= 5 else []
-        _cli_main(_src, _out, _new_tabs, _ref_tabs)
+        import argparse as _ap
+        _parser = _ap.ArgumentParser(add_help=False)
+        _parser.add_argument("source")
+        _parser.add_argument("output")
+        _parser.add_argument("new_tabs")
+        _parser.add_argument("ref_tabs", nargs="?", default="")
+        _parser.add_argument("--remove-events", default="")
+        _parser.add_argument("--add-events", default="")
+        _args, _ = _parser.parse_known_args()
+
+        _src      = _args.source
+        _out      = _args.output
+        _new_tabs = [t.strip() for t in _args.new_tabs.split(",") if t.strip()]
+        _ref_tabs = [t.strip() for t in _args.ref_tabs.split(",") if t.strip()]
+        _remove   = [t.strip() for t in _args.remove_events.split(",") if t.strip()]
+        _add      = [t.strip() for t in _args.add_events.split(",") if t.strip()]
+        _cli_main(_src, _out, _new_tabs, _ref_tabs, events_to_remove=_remove, events_to_add=_add)
     else:
         main()
