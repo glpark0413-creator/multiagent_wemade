@@ -1,0 +1,7 @@
+[PM] Claude CLI 연결 완료  (cmd)
+[PM] 자기학습 매니저 초기화 완료 (세션 수: 15 )
+
+멀티 에이전트 PM 서버 시작: http://localhost:5050
+
+ * Serving Flask app 'server'
+ * Debug mode: off

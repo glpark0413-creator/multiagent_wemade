@@ -1,0 +1,56 @@
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5050
+ * Running on http://172.20.42.218:5050
+Press CTRL+C to quit
+127.0.0.1 - - [04/Jun/2026 11:49:46] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jun/2026 11:49:46] "GET /static/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [04/Jun/2026 11:49:46] "GET /static/app.js HTTP/1.1" 304 -
+127.0.0.1 - - [04/Jun/2026 11:49:46] "GET /api/localizer/files HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jun/2026 11:49:46] "GET /api/localizer/glossary-preview HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jun/2026 11:49:46] "GET /api/event/files HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jun/2026 11:49:46] "GET /api/pm/status HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jun/2026 12:08:11] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jun/2026 12:08:11] "GET /static/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [04/Jun/2026 12:08:11] "GET /static/app.js HTTP/1.1" 304 -
+127.0.0.1 - - [04/Jun/2026 12:08:11] "GET /api/localizer/files HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jun/2026 12:08:11] "GET /api/event/files HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jun/2026 12:08:11] "GET /api/localizer/glossary-preview HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jun/2026 12:08:11] "GET /api/pm/status HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jun/2026 12:08:34] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jun/2026 12:08:36] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jun/2026 12:08:36] "GET /static/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [04/Jun/2026 12:08:36] "GET /static/app.js HTTP/1.1" 304 -
+127.0.0.1 - - [04/Jun/2026 12:08:36] "GET /api/localizer/files HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jun/2026 12:08:36] "GET /api/localizer/glossary-preview HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jun/2026 12:08:36] "GET /api/event/files HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jun/2026 12:08:36] "GET /api/pm/status HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jun/2026 12:08:53] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jun/2026 12:08:53] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jun/2026 12:08:53] "GET /static/style.css HTTP/1.1" 304 -
+127.0.0.1 - - [04/Jun/2026 12:08:53] "GET /static/app.js HTTP/1.1" 304 -
+127.0.0.1 - - [04/Jun/2026 12:08:54] "GET /api/localizer/files HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jun/2026 12:08:54] "GET /api/event/files HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jun/2026 12:08:54] "GET /api/localizer/glossary-preview HTTP/1.1" 200 -
+127.0.0.1 - - [04/Jun/2026 12:08:54] "GET /api/pm/status HTTP/1.1" 200 -
+172.20.42.218 - - [04/Jun/2026 12:10:41] "GET / HTTP/1.1" 200 -
+172.20.42.218 - - [04/Jun/2026 12:10:41] "GET /static/style.css HTTP/1.1" 304 -
+172.20.42.218 - - [04/Jun/2026 12:10:41] "GET /static/app.js HTTP/1.1" 304 -
+172.20.42.218 - - [04/Jun/2026 12:10:41] "GET /api/localizer/files HTTP/1.1" 200 -
+172.20.42.218 - - [04/Jun/2026 12:10:41] "GET /api/event/files HTTP/1.1" 200 -
+172.20.42.218 - - [04/Jun/2026 12:10:41] "GET /api/localizer/glossary-preview HTTP/1.1" 200 -
+172.20.42.218 - - [04/Jun/2026 12:10:41] "GET /api/pm/status HTTP/1.1" 200 -
+172.20.42.218 - - [04/Jun/2026 12:10:54] "POST /api/pm/chat HTTP/1.1" 200 -
+172.20.42.218 - - [04/Jun/2026 12:10:54] "GET /api/pm/stream/9e86d65c HTTP/1.1" 200 -
+172.20.42.218 - - [04/Jun/2026 12:10:54] "POST /api/agent/chat HTTP/1.1" 200 -
+172.20.42.218 - - [04/Jun/2026 12:10:56] "GET /api/pm/stream/69a1f6d5 HTTP/1.1" 200 -
+172.20.42.218 - - [04/Jun/2026 12:11:27] "POST /api/agent/chat HTTP/1.1" 200 -
+172.20.42.218 - - [04/Jun/2026 12:11:27] "GET /api/pm/stream/bdedd55b HTTP/1.1" 200 -
+172.20.42.218 - - [04/Jun/2026 12:11:30] "POST /api/agent/chat HTTP/1.1" 200 -
+172.20.42.218 - - [04/Jun/2026 12:11:30] "GET /api/pm/stream/29c40e7f HTTP/1.1" 200 -
+172.20.42.218 - - [04/Jun/2026 12:12:42] "POST /api/agent/chat HTTP/1.1" 200 -
+172.20.42.218 - - [04/Jun/2026 12:12:42] "GET /api/pm/stream/b0984066 HTTP/1.1" 200 -
+172.20.42.218 - - [04/Jun/2026 12:12:53] "GET /api/localizer/files HTTP/1.1" 200 -
+172.20.42.218 - - [04/Jun/2026 12:12:53] "GET /api/event/files HTTP/1.1" 200 -
+172.20.42.218 - - [04/Jun/2026 12:12:56] "GET /api/event/download?path=C:\\Users\\glpark0413\\Desktop\\업무%20자동화-20260521T024618Z-3-001\\업무%20자동화\\실%20업무\\Multi_agent\\output\\projects\\event-planner\\file\\이벤트기획_20260604.xlsx HTTP/1.1" 200 -
+172.20.42.218 - - [04/Jun/2026 12:16:43] "GET /api/event/download?path=C:\\Users\\glpark0413\\Desktop\\업무%20자동화-20260521T024618Z-3-001\\업무%20자동화\\실%20업무\\Multi_agent\\output\\projects\\event-planner\\file\\이벤트기획_20260604.xlsx HTTP/1.1" 200 -
