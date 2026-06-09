@@ -44,10 +44,12 @@ from _project_config import load_project_paths
 _paths = load_project_paths()
 
 # ─── 섹션 제목 추출 패턴 ─────────────────────────────────────────────────────
-SECTION_RE       = re.compile(r"^\d+\.")
+SECTION_RE       = re.compile(r"^\d+[.)]")
 TITLE_RE         = re.compile(r"^이벤트\s*제목\s*:\s*(.+)$")
 TAB_HEADER_RE    = re.compile(r"^\d{1,2}[./-]\d{1,2}[._\s]")   # "06.11_ Event" 등 제외
 COUPON_TITLE_RE  = re.compile(r"^\d+월\s+이달의\s+쿠폰")          # "5월 이달의 쿠폰" 등 쿠폰 섹션 헤더
+# "폴리볼 쿠폰", "KBO 쿠폰" 등 커스텀 쿠폰 섹션 헤더 ("■"로 시작하는 섹션 내용 라인 제외)
+CUSTOM_COUPON_RE = re.compile(r"^(?!■|∎)[가-힣A-Za-z0-9]+\s+쿠폰$")
 
 # 월/시즌 키워드 감지 패턴 — 제목에서 교체 대상이 되는 부분
 # 우선순위 순서 (긴 패턴 먼저, 뒤따르는 "의"까지 포함해서 통째로 매치)
@@ -115,6 +117,9 @@ def parse_section_title(val: str) -> str | None:
         return m.group(1).strip()
     # "N월 이달의 쿠폰" 형식 쿠폰 섹션 헤더 (예: "5월 이달의 쿠폰")
     if COUPON_TITLE_RE.match(val):
+        return val
+    # "폴리볼 쿠폰", "KBO 쿠폰" 등 커스텀 쿠폰 섹션 헤더
+    if CUSTOM_COUPON_RE.match(val):
         return val
     return None
 

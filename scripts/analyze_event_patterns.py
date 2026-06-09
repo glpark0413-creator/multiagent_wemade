@@ -64,25 +64,28 @@ OUTPUT_DIR = Path("output")
 OUTPUT_JSON_DIR = OUTPUT_DIR / "json"
 
 # ─── 섹션 패턴 ────────────────────────────────────────────────────────────────
-# 두 가지 섹션 경계 형식 지원:
-#   1) "숫자." 패턴  예: "1. 포인트 레이스 이벤트"
-#   2) "이벤트 제목 :" 패턴  예: "이벤트 제목 : 올스타 직행! 14일 출석 이벤트!"
-SECTION_PATTERN       = re.compile(r"^\d+\.")
+# 섹션 경계 형식:
+#   1) "숫자." / "숫자)" 패턴  예: "1. 포인트 레이스 이벤트"
+#   2) "이벤트 제목 :" 패턴    예: "이벤트 제목 : 올스타 직행! 14일 출석 이벤트!"
+#   3) "N월 이달의 쿠폰" 패턴   예: "5월 이달의 쿠폰"
+#   4) 커스텀 쿠폰 헤더         예: "폴리볼 쿠폰", "KBO 쿠폰"
+SECTION_PATTERN       = re.compile(r"^\d+[.)]")
 EVENT_TITLE_PATTERN   = re.compile(r"^이벤트\s*제목\s*:\s*(.+)$")
+COUPON_TITLE_PATTERN  = re.compile(r"^\d+월\s+이달의\s+쿠폰")
+CUSTOM_COUPON_PATTERN = re.compile(r"^(?!■|∎)[가-힣A-Za-z0-9]+\s+쿠폰$")
 
 
 def parse_section_title(val: str) -> "str | None":
-    """B열 셀 값이 섹션 경계이면 정규화된 이벤트 제목을 반환, 아니면 None.
-
-    - '숫자.' 패턴  → 값 그대로 반환  (예: '1. 포인트 레이스 이벤트')
-    - '이벤트 제목 :' 패턴 → 콜론 이후 실제 제목만 추출
-      (예: '이벤트 제목 : 올스타 직행! 14일 출석 이벤트!' → '올스타 직행! 14일 출석 이벤트!')
-    """
+    """B열 셀 값이 섹션 경계이면 정규화된 이벤트 제목을 반환, 아니면 None."""
     if SECTION_PATTERN.match(val):
         return val
     m = EVENT_TITLE_PATTERN.match(val)
     if m:
         return m.group(1).strip()
+    if COUPON_TITLE_PATTERN.match(val):
+        return val
+    if CUSTOM_COUPON_PATTERN.match(val):
+        return val
     return None
 
 # ─── 이벤트 유형 정규화 키워드 (공통 + 장르별) ───────────────────────────────
@@ -98,6 +101,7 @@ EVENT_TYPE_KEYWORDS = [
     ("빙고",          "빙고_이벤트"),
     ("포인트 레이스", "포인트레이스_이벤트"),
     ("응모권",        "응모권_이벤트"),
+    ("쿠폰",          "쿠폰_이벤트"),          # ← 매월 쿠폰 / 커스텀 쿠폰 포함
     ("승부 예측",     "승부예측_이벤트"),
     ("예측",          "승부예측_이벤트"),
     # 야구 스포츠
