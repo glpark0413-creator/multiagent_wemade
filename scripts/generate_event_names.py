@@ -47,6 +47,7 @@ _paths = load_project_paths()
 SECTION_RE       = re.compile(r"^\d+\.")
 TITLE_RE         = re.compile(r"^이벤트\s*제목\s*:\s*(.+)$")
 TAB_HEADER_RE    = re.compile(r"^\d{1,2}[./-]\d{1,2}[._\s]")   # "06.11_ Event" 등 제외
+COUPON_TITLE_RE  = re.compile(r"^\d+월\s+이달의\s+쿠폰")          # "5월 이달의 쿠폰" 등 쿠폰 섹션 헤더
 
 # 월/시즌 키워드 감지 패턴 — 제목에서 교체 대상이 되는 부분
 # 우선순위 순서 (긴 패턴 먼저, 뒤따르는 "의"까지 포함해서 통째로 매치)
@@ -110,7 +111,12 @@ def parse_section_title(val: str) -> str | None:
     if SECTION_RE.match(val):
         return val
     m = TITLE_RE.match(val)
-    return m.group(1).strip() if m else None
+    if m:
+        return m.group(1).strip()
+    # "N월 이달의 쿠폰" 형식 쿠폰 섹션 헤더 (예: "5월 이달의 쿠폰")
+    if COUPON_TITLE_RE.match(val):
+        return val
+    return None
 
 
 def tab_to_date(tab: str) -> datetime | None:

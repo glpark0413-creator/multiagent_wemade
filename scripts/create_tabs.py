@@ -811,6 +811,14 @@ def _remove_event_sections(ws, event_types: list):
         if etype != "기타":
             section_rows.append((row, etype, raw))
 
+    # 연속 동일 유형 섹션 병합 (예: "5월 이달의 쿠폰" + "1. 5월 이달의 쿠폰 보상" → 하나로)
+    merged_rows = []
+    for row, etype, raw in section_rows:
+        if merged_rows and merged_rows[-1][1] == etype:
+            continue  # 직전과 같은 유형 → 섹션 내부 하위 항목으로 간주, 스킵
+        merged_rows.append((row, etype, raw))
+    section_rows = merged_rows
+
     print(f"  [섹션 탐지] 총 {len(section_rows)}개 섹션: {[(r, e) for r, e, _ in section_rows]}")
 
     # 제거 대상 범위 계산 (역순 삭제)
@@ -865,6 +873,14 @@ def _find_event_section_in_history(wb, source_tab: str, event_type: str):
             if etype != "기타":
                 section_rows.append((row, etype))
 
+        # 연속 동일 유형 섹션 병합 (예: "5월 이달의 쿠폰" + "1. 5월 이달의 쿠폰 보상" → 하나로)
+        merged_rows = []
+        for row, etype in section_rows:
+            if merged_rows and merged_rows[-1][1] == etype:
+                continue
+            merged_rows.append((row, etype))
+        section_rows = merged_rows
+
         for i, (start_row, etype) in enumerate(section_rows):
             if etype == event_type:
                 end_row = section_rows[i + 1][0] - 1 if i + 1 < len(section_rows) else ws.max_row
@@ -878,27 +894,30 @@ def _find_event_section_in_history(wb, source_tab: str, event_type: str):
 def _fix_coupon_end_date(ws, row_start: int, row_end: int, tab: str):
     """
     쿠폰이벤트 섹션의 진행 기간 종료일을 tab이 속한 달의 말일로 덮어쓴다.
+    시작일이 종료일보다 큰 역전 현상이 발생한 경우 시작일도 탭 기준일로 교정한다.
     예) tab='260625' → 월=6 → 말일=30 → 종료일을 06/30으로 교체
+         시작일 07/09 > 06/30 이면 → 시작일을 06/25(탭 기준일)로 교체
     패턴: '∎ 진행 기간 : MM/DD(...) HH:MM ~ MM/DD(...) HH:MM:SS ...'
     """
     import re as _re
     import calendar as _cal
 
-    # tab에서 연/월 파싱
+    # tab에서 연/월/일 파싱
     try:
         year  = 2000 + int(tab[:2])
         month = int(tab[2:4])
+        day   = int(tab[4:6])
     except Exception:
         return
 
     last_day = _cal.monthrange(year, month)[1]
-    new_end_mmdd = f"{month:02d}/{last_day:02d}"
+    new_end_mmdd   = f"{month:02d}/{last_day:02d}"
+    tab_base_mmdd  = f"{month:02d}/{day:02d}"  # 탭 기준일 (예: 260625 → 06/25)
 
-    # 진행 기간 행 탐색 (B열 또는 C열에 '진행 기간' 포함)
-    _period_pat = _re.compile(
-        r'(.*~\s*)(\d{1,2}/\d{1,2})(.*)',  # ~ 이후 MM/DD 캡처
-        _re.DOTALL
-    )
+    # 종료일 패턴: ~ 이후 첫 MM/DD
+    _end_pat = _re.compile(r'(.*~\s*)(\d{1,2}/\d{1,2})(.*)', _re.DOTALL)
+    # 시작일 패턴: 줄 앞쪽 첫 MM/DD (~ 이전)
+    _start_pat = _re.compile(r'(\d{1,2}/\d{1,2})(.*?~)', _re.DOTALL)
 
     for row in range(row_start, row_end + 1):
         for col in range(1, ws.max_column + 1):
@@ -908,15 +927,62 @@ def _fix_coupon_end_date(ws, row_start: int, row_end: int, tab: str):
                 continue
             if "진행 기간" not in v:
                 continue
-            m = _period_pat.search(v)
-            if not m:
+
+            new_v = v
+
+            # ① 종료일 → 말일로 교정
+            m_end = _end_pat.search(new_v)
+            if m_end:
+                old_end = f"{int(m_end.group(2).split('/')[0]):02d}/{int(m_end.group(2).split('/')[1]):02d}"
+                if old_end != new_end_mmdd:
+                    new_v = new_v[:m_end.start(2)] + new_end_mmdd + new_v[m_end.end(2):]
+                    print(f"  [쿠폰 말일 적용] row{row} col{col}: '{old_end}' → '{new_end_mmdd}'")
+
+            # ② 시작일 역전 검사: 시작일이 종료일(말일)보다 크면 탭 기준일로 교정
+            m_start = _start_pat.search(new_v)
+            if m_start:
+                start_parts = m_start.group(1).split('/')
+                try:
+                    start_mm, start_dd = int(start_parts[0]), int(start_parts[1].split('(')[0])
+                    end_mm, end_dd = int(new_end_mmdd.split('/')[0]), int(new_end_mmdd.split('/')[1])
+                    if (start_mm, start_dd) > (end_mm, end_dd):
+                        old_start = m_start.group(1)
+                        # 요일 접미사 보존 (예: "07/09(목)" → "06/25(목)")
+                        suffix_m = _re.match(r'\d+/\d+(\([가-힣]+\))?', old_start)
+                        suffix = suffix_m.group(1) if suffix_m and suffix_m.group(1) else ""
+                        new_start = tab_base_mmdd + suffix
+                        new_v = new_v[:m_start.start(1)] + new_start + new_v[m_start.end(1):]
+                        print(f"  [쿠폰 시작일 역전 수정] row{row} col{col}: '{old_start}' → '{new_start}' (탭 기준일)")
+                except Exception:
+                    pass
+
+            if new_v != v:
+                cell.value = new_v
+
+
+def _fix_coupon_month_label(ws, row_start: int, row_end: int, tab: str):
+    """
+    쿠폰이벤트 섹션 내 'N월 이달의 쿠폰' 형식 텍스트의 월을 tab의 월로 교체.
+    예) tab='260625' → 월=6 → '5월 이달의 쿠폰' → '6월 이달의 쿠폰'
+    """
+    import re as _re
+    try:
+        month = int(tab[2:4])
+    except Exception:
+        return
+
+    _coupon_month_re = _re.compile(r'(\d+)(월\s+이달의\s+쿠폰)', _re.IGNORECASE)
+
+    for row in range(row_start, row_end + 1):
+        for col in range(1, ws.max_column + 1):
+            cell = ws.cell(row=row, column=col)
+            v = cell.value
+            if not isinstance(v, str):
                 continue
-            old_end_mmdd = f"{int(m.group(2).split('/')[0]):02d}/{int(m.group(2).split('/')[1]):02d}"
-            if old_end_mmdd == new_end_mmdd:
-                continue  # 이미 말일이면 스킵
-            new_v = v[:m.start(2)] + new_end_mmdd + v[m.end(2):]
-            cell.value = new_v
-            print(f"  [쿠폰 말일 적용] row{row} col{col}: '{old_end_mmdd}' → '{new_end_mmdd}' (월 말일)")
+            new_v = _coupon_month_re.sub(lambda m: f"{month}{m.group(2)}", v)
+            if new_v != v:
+                cell.value = new_v
+                print(f"  [쿠폰 월 라벨 갱신] row{row} col{col}: '{v}' → '{new_v}'")
 
 
 def _add_event_sections(ws_new, wb_src, source_tab: str, event_types: list,
@@ -968,6 +1034,7 @@ def _add_event_sections(ws_new, wb_src, source_tab: str, event_types: list,
 
         # ── 이벤트 유형별 특수 날짜 규칙 적용 ───────────────────────────────
         if etype == "쿠폰이벤트":
+            _fix_coupon_month_label(ws_new, dest_start, dest_start + count - 1, date_target)
             _fix_coupon_end_date(ws_new, dest_start, dest_start + count - 1, date_target)
 
         added += count
