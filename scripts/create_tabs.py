@@ -1020,6 +1020,27 @@ def _add_event_sections(ws_new, wb_src, source_tab: str, event_types: list,
                     dest_cell.alignment    = _copy2(src_cell.alignment)
                     dest_cell.number_format = src_cell.number_format
 
+        # ── 병합 셀 복사 (쿠폰 테이블 레이아웃 보존) ─────────────────────
+        _row_offset = dest_start - start_row
+        for _mr in list(ws_hist.merged_cells.ranges):
+            if _mr.max_row < start_row or _mr.min_row > end_row:
+                continue
+            _new_min_r = max(_mr.min_row, start_row) + _row_offset
+            _new_max_r = min(_mr.max_row, end_row)   + _row_offset
+            try:
+                ws_new.merge_cells(
+                    start_row=_new_min_r, start_column=_mr.min_col,
+                    end_row=_new_max_r,   end_column=_mr.max_col,
+                )
+            except Exception:
+                pass
+
+        # ── 행 높이 복사 ────────────────────────────────────────────────
+        for _r in range(start_row, end_row + 1):
+            _rd = ws_hist.row_dimensions.get(_r)
+            if _rd and _rd.height:
+                ws_new.row_dimensions[dest_start + (_r - start_row)].height = _rd.height
+
         count = end_row - start_row + 1
         print(f"  [이벤트 추가] '{etype}' 섹션: {from_tab}탭에서 {count}행 복사 → {dest_start}행~")
 
@@ -1083,6 +1104,35 @@ def _apply_date_map_to_rows(ws, row_start: int, row_end: int, date_map: dict):
                     cell.value = new_val
 
 
+def _fix_all_coupon_sections(ws, new_tab: str):
+    """
+    워크시트 내 모든 쿠폰이벤트 섹션을 찾아 월 라벨과 말일 교정을 적용한다.
+    copy_worksheet 경로(main copy)에서도 쿠폰 섹션 날짜가 올바르게 수정되도록 보장.
+    """
+    section_rows = []
+    for _row in range(1, ws.max_row + 1):
+        _v = ws.cell(row=_row, column=2).value
+        if not _v or not isinstance(_v, str):
+            continue
+        _etype = _b_val_to_etype(_v.strip())
+        if _etype != "기타":
+            section_rows.append((_row, _etype))
+
+    merged = []
+    for _row, _etype in section_rows:
+        if merged and merged[-1][1] == _etype:
+            continue
+        merged.append((_row, _etype))
+
+    for i, (_start, _etype) in enumerate(merged):
+        if _etype != "쿠폰이벤트":
+            continue
+        _end = merged[i + 1][0] - 1 if i + 1 < len(merged) else ws.max_row
+        _fix_coupon_month_label(ws, _start, _end, new_tab)
+        _fix_coupon_end_date(ws, _start, _end, new_tab)
+        print(f"  [쿠폰 섹션 교정] '{new_tab}': row {_start}~{_end}")
+
+
 def _cli_main(source: str, output: str, new_tabs: list, ref_tabs: list,
               events_to_remove: list = None, events_to_add: list = None):
     """서버 파이프라인에서 CLI 인수로 호출되는 진입점."""
@@ -1134,6 +1184,9 @@ def _cli_main(source: str, output: str, new_tabs: list, ref_tabs: list,
             date_map=cfg.get("date_map"),
             event_name_replacements=event_repls,
         )
+
+        # ── 쿠폰 섹션 특수 교정: 말일 + 월 라벨 (copy_worksheet 경로용) ──
+        _fix_all_coupon_sections(ws_new, new_tab)
 
         # ── 보상 처리: 역사 패턴 분석 → 균형 보상 적용 → 참조 대비 하이라이트 ───
         ref_pairs  = _find_reward_col_pairs(ws_src)
