@@ -1354,6 +1354,37 @@ function _renderTabSelector(newTabs, availableTabs, container) {
   const selections = {};
   newTabs.forEach(t => selections[t] = null);
 
+  // 참조 탭 목록이 없으면 소스 경로 입력 UI로 대체
+  if (!availableTabs || availableTabs.length === 0) {
+    const notice = document.createElement('div');
+    notice.style.cssText = 'color:#e2a94b;font-size:13px;margin-bottom:10px';
+    notice.textContent = '⚠ 참조할 수 있는 이전 탭이 없습니다. 소스 파일 경로를 입력해주세요.';
+    wrap.appendChild(notice);
+
+    const pathInput = document.createElement('input');
+    pathInput.type = 'text';
+    pathInput.placeholder = 'C:\\...\\파일명.xlsx 또는 Google Sheets URL';
+    pathInput.style.cssText = 'width:100%;padding:8px 10px;border-radius:6px;border:1px solid #4a5568;background:#2d3748;color:#e2e8f0;font-size:13px;box-sizing:border-box;margin-bottom:8px';
+    wrap.appendChild(pathInput);
+
+    const pathBtn = document.createElement('button');
+    pathBtn.className = 'btn btn-primary tab-selector-submit ready';
+    pathBtn.textContent = '📂 경로 확인 → 탭 목록 불러오기';
+    pathBtn.addEventListener('click', () => {
+      const val = pathInput.value.trim();
+      if (!val) return;
+      wrap.innerHTML = `<div style="color:#a0aec0;font-size:13px">경로를 확인하는 중...</div>`;
+      const input = document.getElementById('pm-input');
+      input.value = val;
+      pmSend();
+    });
+    wrap.appendChild(pathBtn);
+
+    container.appendChild(wrap);
+    document.getElementById('chat-messages').scrollTop = 99999;
+    return;
+  }
+
   newTabs.forEach(newTab => {
     const row = document.createElement('div');
     row.className = 'tab-selector-row';

@@ -483,8 +483,13 @@ def _pm_rule_route(user_msg: str, history: list) -> dict | None:
 
     source = sheets_url or xlsx_path
 
-    # YYMMDD 날짜 탭 목록
-    tabs = list(dict.fromkeys(_re.findall(r'\b(2[0-9]{5})\b', all_text)))
+    # YYMMDD 날짜 탭 목록 (6자리 YYMMDD 또는 4자리 MMDD 모두 인식)
+    _year_prefix = str(__import__('datetime').datetime.now().year)[2:]
+    _tabs_raw = list(dict.fromkeys(
+        _re.findall(r'\b(2[0-9]{5})\b', all_text) +           # 6자리: 260625
+        [_year_prefix + t for t in _re.findall(r'\b((?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))\b', all_text)]  # 4자리: 0625 → 260625
+    ))
+    tabs = list(dict.fromkeys(_tabs_raw))  # 중복 제거
 
     # 마켓
     market = None
@@ -501,7 +506,22 @@ def _pm_rule_route(user_msg: str, history: list) -> dict | None:
         if source:
             params["source_path"] = source
         else:
-            missing.append("source_path (Google Sheets URL 또는 xlsx 경로)")
+            # 소스 경로 누락 → 에이전트 핸드오프 전에 PM이 직접 질문
+            return {
+                "agent": "event-planner",
+                "ready": False,
+                "block": True,          # block=True → _pm_process가 핸드오프하지 않고 메시지만 출력
+                "params": {},
+                "missing": ["source_path"],
+                "response": (
+                    "[PM] 이벤트 기획 요청을 확인했습니다.\n\n"
+                    "📂 **참조할 이벤트 문서 경로가 필요합니다.**\n\n"
+                    "아래 중 하나를 알려주세요:\n"
+                    "- Google Sheets URL (예: `https://docs.google.com/spreadsheets/d/...`)\n"
+                    "- 로컬 xlsx 파일 경로 (예: `C:/Users/.../이벤트.xlsx`)\n\n"
+                    f"{'📅 탭: ' + ', '.join(tabs) if tabs else '생성할 탭 날짜도 함께 알려주세요. (예: 260625, 260702)'}"
+                ),
+            }
 
         if tabs:
             params["new_tabs"] = tabs
@@ -566,13 +586,18 @@ def _pm_process(user_msg: str, history: list, q: _queue_module.Queue):
         if result.get("response"):
             q.put({"type": "message", "content": result["response"]})
 
+        # block=True: 필수 정보 누락 → 핸드오프 없이 PM이 사용자에게 질문하고 대기
+        if result.get("block"):
+            q.put({"type": "done", "status": "chat"})
+            return
+
         if result.get("ready") and result.get("agent") == "event-planner":
             q.put({"type": "handoff", "agent": "event-planner", "params": result["params"]})
             q.put({"type": "done", "status": "handoff"})
         elif result.get("ready") and result.get("agent") == "game-localizer":
             _run_localizer_pipeline(result["params"], q)
         else:
-            # 정보 부족 → 에이전트에 handoff해서 나머지 수집하게 함
+            # 소스는 있지만 탭/마켓 등 부가 정보 누락 → 에이전트에 handoff해서 수집
             q.put({"type": "handoff", "agent": result["agent"],
                    "params": result.get("params", {})})
             q.put({"type": "done", "status": "handoff"})
@@ -1142,14 +1167,83 @@ def _event_planner_agent(user_msg: str, history: list, context: dict, q: _queue_
         suggested = context.get("_suggested_keywords", [])
         keywords = _parse_keyword_selection(user_msg, suggested)
         context["keywords"] = keywords
-        context["_agent_step"] = "wait_ref_tabs"
         kw_preview = ", ".join(keywords[:5]) + ("..." if len(keywords) > 5 else "")
+
+        # 참조 가능한 탭이 없으면 소스 경로를 먼저 물어본다
+        if not available_tabs:
+            context["_agent_step"] = "wait_source_path"
+            q.put({"type": "message", "content": (
+                f"**{len(keywords)}개** 키워드가 저장됐습니다 ({kw_preview})\n\n"
+                "참조할 수 있는 이전 탭이 없습니다.\n"
+                "복사 원본으로 사용할 **소스 파일 경로** 또는 **Google Sheets URL**을 입력해주세요.\n\n"
+                "예시:\n"
+                "- `C:\\Users\\...\\파일명.xlsx`\n"
+                "- `https://docs.google.com/spreadsheets/d/...`"
+            )})
+            q.put({"type": "context_update", "context": context})
+            q.put({"type": "done", "status": "chat"})
+            return
+
+        context["_agent_step"] = "wait_ref_tabs"
         msg = f"**{len(keywords)}개** 키워드가 저장됐습니다 ({kw_preview})\n\n아래에서 각 탭의 **참조 탭**을 클릭해서 선택해주세요."
         q.put({"type": "message", "content": msg})
         # 클릭형 탭 선택 UI 이벤트 — 프론트엔드에서 시각적 선택기로 렌더링
         q.put({"type": "tab_selector",
                "new_tabs": new_tabs,
                "available_tabs": available_tabs[:15]})
+        q.put({"type": "context_update", "context": context})
+        q.put({"type": "done", "status": "chat"})
+        return
+
+    # ── STEP 2-B: 소스 경로 수집 (available_tabs 없을 때 진입) ───────────────
+    if step == "wait_source_path":
+        raw = user_msg.strip().strip('"').strip("'")
+        # Google Sheets URL 또는 로컬 경로 판별
+        try:
+            from gdrive_utils import is_google_url
+            if is_google_url(raw):
+                source_local, _ = resolve_source(raw)
+            else:
+                source_local = raw
+        except Exception:
+            source_local = raw
+
+        if not Path(source_local).exists():
+            _done(
+                f"파일을 찾을 수 없습니다: `{source_local}`\n\n"
+                "올바른 경로 또는 Google Sheets URL을 다시 입력해주세요."
+            )
+            return
+
+        # 소스 갱신 + available_tabs 재추출
+        context["source_path"] = source_local
+        source = source_local
+        try:
+            import openpyxl as _xl2
+            wb2 = _xl2.load_workbook(source_local, read_only=True)
+            available_tabs = sorted(
+                [s for s in wb2.sheetnames if _re_agent.match(r'^\d{6}$', s)],
+                reverse=True
+            )[:15]
+            wb2.close()
+        except Exception:
+            available_tabs = []
+
+        if not available_tabs:
+            _done(
+                f"소스 파일에서 날짜 형식 탭(YYMMDD)을 찾을 수 없습니다.\n"
+                "탭이 포함된 다른 파일 경로를 입력해주세요."
+            )
+            return
+
+        context["_agent_step"] = "wait_ref_tabs"
+        q.put({"type": "message", "content": (
+            f"소스 파일을 확인했습니다. 사용 가능한 탭: **{', '.join(available_tabs[:5])}**{'...' if len(available_tabs) > 5 else ''}\n\n"
+            "아래에서 각 탭의 **참조 탭**을 클릭해서 선택해주세요."
+        )})
+        q.put({"type": "tab_selector",
+               "new_tabs": new_tabs,
+               "available_tabs": available_tabs})
         q.put({"type": "context_update", "context": context})
         q.put({"type": "done", "status": "chat"})
         return
@@ -1245,24 +1339,37 @@ def _event_planner_agent(user_msg: str, history: list, context: dict, q: _queue_
                     events_to_remove = [e for e in optional_present if e not in mentioned]
                 # else: 아무것도 언급 안 했으면 그대로 유지
 
-        # ── 추가 가능 이벤트 (optional_absent) 처리 ─────────────────────
-        if optional_absent:
-            # "모두 진행" / "모두 적용" / "모두 추가" 등 모두 인식
-            add_all = (
-                any(k in absent_text for k in [
-                    "모두 적용", "전부 추가", "모두 추가", "다 추가", "다 적용",
-                    "다 넣", "전부 넣", "모두 넣", "다 포함", "전부 포함",
-                ])
-                or ("모두" in absent_text and any(k in absent_text for k in ["진행", "적용", "추가", "넣"]))
-                or ("전부" in absent_text and any(k in absent_text for k in ["진행", "적용", "추가", "넣"]))
-                or ("다" in absent_text and any(k in absent_text for k in ["넣어", "추가해", "적용해", "포함"]))
-            )
-            if add_all:
-                events_to_add = list(optional_absent)
-            else:
-                events_to_add = [e for e in optional_absent
-                                 if e.replace("이벤트", "").lower() in absent_text
-                                 or e.lower() in absent_text]
+        # ── 추가 가능 이벤트 처리 ─────────────────────────────────────────
+        # optional_absent에 있는 이벤트 + 사용자가 명시한 이벤트 모두 포함
+        _ALL_ETYPES = [
+            "쿠폰이벤트", "승부예측", "야구공찾기", "PvP이벤트",
+            "출석이벤트", "응모권이벤트", "미션이벤트", "교환소이벤트",
+            "오더경쟁이벤트", "포인트레이스", "룰렛이벤트", "빙고이벤트",
+        ]
+        absent_opt_list = list(optional_absent)  # 이미 [str, ...] 형태
+
+        add_all = (
+            any(k in absent_text for k in [
+                "모두 적용", "전부 추가", "모두 추가", "다 추가", "다 적용",
+                "다 넣", "전부 넣", "모두 넣", "다 포함", "전부 포함",
+            ])
+            or ("모두" in absent_text and any(k in absent_text for k in ["진행", "적용", "추가", "넣"]))
+            or ("전부" in absent_text and any(k in absent_text for k in ["진행", "적용", "추가", "넣"]))
+            or ("다" in absent_text and any(k in absent_text for k in ["넣어", "추가해", "적용해", "포함"]))
+        )
+        if add_all and absent_opt_list:
+            events_to_add = list(absent_opt_list)
+        else:
+            # optional_absent 필터링
+            from_absent = [e for e in absent_opt_list
+                           if e.replace("이벤트", "").lower() in absent_text
+                           or e.lower() in absent_text]
+            # 사용자가 명시했지만 optional_absent에 없는 이벤트도 추가 (분석 누락 보완)
+            explicitly_named = [e for e in _ALL_ETYPES
+                                if e not in absent_opt_list
+                                and (e.replace("이벤트", "").lower() in absent_text
+                                     or e.lower() in absent_text)]
+            events_to_add = from_absent + [e for e in explicitly_named if e not in from_absent]
 
         context["_events_to_remove"] = events_to_remove
         context["_events_to_add"]    = events_to_add

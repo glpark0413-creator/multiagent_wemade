@@ -118,6 +118,46 @@ B열 셀 값이 섹션 경계인지 판단하는 패턴 우선순위 (두 파일
 
 ---
 
+### 이벤트 기획 에이전트 상태 머신 (`_event_planner_agent`) — 2026-06-10 수정
+
+에이전트는 사용자와 단계별 대화를 통해 파라미터를 수집한다.
+
+```
+[start]
+    │ 장르 확인
+    ▼
+[wait_genre] ──→ (장르 인식 실패 시 반복)
+    │ 키워드 생성 + 선택
+    ▼
+[wait_keywords]
+    │
+    ├─ available_tabs 있음 ──→ tab_selector UI 표시 ──→ [wait_ref_tabs]
+    │
+    └─ available_tabs 없음 ──→ [wait_source_path] ← 2026-06-10 추가
+                                    │ 소스 경로/URL 입력
+                                    ├─ 파일 없음 → 재질문
+                                    ├─ 탭 없음   → 재질문
+                                    └─ 탭 확인   → tab_selector UI ──→ [wait_ref_tabs]
+    │
+    ▼
+[wait_ref_tabs] → 이벤트 구성 분석 → [wait_event_composition] → 파이프라인 실행
+```
+
+**`wait_source_path` 상태 (신규):**
+
+| 조건 | 동작 |
+|---|---|
+| 소스 경로 미설정 / 파일 없음 | 경로 재입력 요청 |
+| 파일 존재하나 날짜 탭(YYMMDD) 없음 | 다른 파일 재입력 요청 |
+| 날짜 탭 발견 | `context.source_path` 갱신 → `tab_selector` 이벤트 emit → `wait_ref_tabs` 전환 |
+
+**프론트엔드 연동 (`_renderTabSelector`):**
+
+- `availableTabs`가 비어 있으면 탭 버튼 대신 **경로 입력 폼** 표시
+- 사용자가 경로 입력 후 "경로 확인 → 탭 목록 불러오기" 클릭 시 해당 경로를 채팅 입력으로 자동 전송
+
+---
+
 ### create_tabs.py → _cli_main() 동작 원리
 
 1. 소스 xlsx 열기 (read_only)
